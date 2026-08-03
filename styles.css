@@ -241,6 +241,20 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
 .progress-track { height: 8px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
 .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
+/* DECK-EINFÜGEN MODAL */
+.modal { position: fixed; inset: 0; z-index: 1050; display: none; align-items: center; justify-content: center;
+  background: rgba(20,18,15,.35); }
+.modal.active { display: flex; }
+.modal-box { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.modal-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.modal-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+.modal-box textarea { width: 100%; height: 260px; resize: vertical; padding: 10px 12px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5;
+  color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; outline: none; }
+.modal-box textarea:focus { border-color: var(--accent); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
 .toasts { position: fixed; bottom: 18px; right: 18px; z-index: 1100; display: flex; flex-direction: column; gap: 8px; }
 .toast { padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; color: #fff;
   background: var(--accent); box-shadow: 0 8px 30px rgba(0,0,0,.25); }

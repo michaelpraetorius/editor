@@ -37,6 +37,44 @@ function fontAvailable(family) {
   } catch { return false; }
 }
 
+// Kleiner, stabiler String-Hash (djb2) zur Erkennung "neues Deck vs. schon geladen".
+function simpleHash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function decodeB64Utf8(s) {
+  return decodeURIComponent(escape(atob(decodeURIComponent(s))));
+}
+
+// Ermittelt ein Start-Deck aus (Priorität):
+//  1. Link-Fragment  #deck=<base64(JSON)>   → Deck steckt im Link (teilbar)
+//  2. URL-Parameter  ?deck=<url>            → Deck von einer URL laden
+//  3. lokale Datei   deck.json              → vom Agenten geschrieben
+async function getDeckSource() {
+  const m = location.hash.match(/[#&]deck=([^&]+)/);
+  if (m) { try { return { text: decodeB64Utf8(m[1]), kind: 'link' }; } catch {} }
+  const u = new URLSearchParams(location.search).get('deck');
+  if (u) { try { const r = await fetch(u, { cache: 'no-store' }); if (r.ok) return { text: await r.text(), kind: 'url' }; } catch {} }
+  try { const r = await fetch('deck.json', { cache: 'no-store' }); if (r.ok) return { text: await r.text(), kind: 'file' }; } catch {}
+  return null;
+}
+
+// Lädt ein neues Deck NUR, wenn es sich vom zuletzt geladenen unterscheidet —
+// so überschreibt ein Reload nicht die Bearbeitungen des Nutzers, aber eine neue
+// Generierung (geänderte deck.json / neuer Link) wird frisch übernommen.
+async function loadInitialDeck(store) {
+  const src = await getDeckSource();
+  if (!src) return;
+  const sig = 'deck:' + simpleHash(src.text);
+  if (localStorage.getItem('cpe.deckSig') === sig) return;   // schon geladen -> Edits behalten
+  try {
+    store.loadDeck(JSON.parse(src.text));
+    localStorage.setItem('cpe.deckSig', sig);
+    console.info(`[Deck] geladen aus ${src.kind}`);
+  } catch (e) { console.warn('[Deck] konnte nicht geladen werden:', e); }
+}
+
 async function boot() {
   // Schriften müssen für Canvas-Textsatz bereitstehen (Konzept 8.2).
   if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch {} }
@@ -46,6 +84,7 @@ async function boot() {
   console.info(`[Schrift] Marken-Display-Schrift ${brandFont ? 'verfügbar ✔ (wird verwendet)' : 'nicht gefunden → Fallback Inter. Name in src/model/brand.js (BRAND_DISPLAY) setzen.'}`);
 
   const store = new Store();
+  await loadInitialDeck(store);                // ggf. Deck aus Link / URL / deck.json laden
   const folder = await loadExternalAssets();   // Gradienten + DNA aus /assets registrieren
   applyFolderBackgrounds(store, folder);       // Slides automatisch damit belegen
   await preloadDeckAssets(store.deck);
@@ -77,6 +116,9 @@ async function boot() {
       else if (sel?.kind === 'logo') { e.preventDefault(); store.deck.brand.show = false; store.selection = null; store.commit('logo-hide'); }
     }
   });
+
+  // Neuer Teilen-Link in bereits offenem Tab: neu laden, damit das Deck greift.
+  window.addEventListener('hashchange', () => { if (location.hash.includes('deck=')) location.reload(); });
 
   window.__cpe = { store, renderer, ui };   // für Debugging in der Konsole
 }

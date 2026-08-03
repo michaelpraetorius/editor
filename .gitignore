@@ -8,6 +8,9 @@
 # Lokale Claude-Einstellungen (Berechtigungen, Pfade) - nicht teilen
 .claude/settings.local.json
 
+# Vom Agenten generiertes Deck (Laufzeit-Artefakt, kein Quellcode)
+deck.json
+
 # Brand assets are NOT committed - only the folder structure is kept.
 # Put your own files locally in assets/backgrounds, assets/overlays, assets/artwork.
 assets/backgrounds/*

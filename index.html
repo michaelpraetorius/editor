@@ -57,6 +57,14 @@
       </div>
       <div class="group">
         <div class="menu-wrap">
+          <button id="deckBtn">Deck ▾</button>
+          <div class="menu" id="deckMenu">
+            <button data-deck="paste">Deck einfügen …</button>
+            <button data-deck="link">Teilen-Link kopieren</button>
+            <button data-deck="copy">deck.json kopieren</button>
+          </div>
+        </div>
+        <div class="menu-wrap">
           <button id="exportBtn" class="primary">Export ▾</button>
           <div class="menu" id="exportMenu">
             <button data-export="png">PNG · aktuelle Folie</button>
@@ -107,6 +115,19 @@
     <div class="progress-box">
       <div class="progress-txt" id="progressTxt">Export …</div>
       <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </div>
+
+  <!-- Deck einfügen (vom Agenten generiertes deck.json) -->
+  <div class="modal" id="deckModal">
+    <div class="modal-box">
+      <div class="modal-title">Deck einfügen</div>
+      <p class="modal-hint">deck.json des Agenten hier einfügen — die Vorschau wird sofort damit gefüllt.</p>
+      <textarea id="deckPaste" spellcheck="false" placeholder='{ "meta": { … }, "slides": [ … ] }'></textarea>
+      <div class="modal-actions">
+        <button id="deckCancel">Abbrechen</button>
+        <button id="deckLoad" class="primary">Laden</button>
+      </div>
     </div>
   </div>
 

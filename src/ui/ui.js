@@ -3,7 +3,7 @@
 // KEIN Inspector, KEIN JSON — alles passiert direkt auf der Slide.
 
 import { FORMATS } from '../model/formats.js';
-import { assetsByType, loadAssetImage, getAsset, getLoadedImage } from '../model/assets.js';
+import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets } from '../model/assets.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
@@ -34,6 +34,7 @@ export class UI {
     // (Elemente-Upload/Datei-Drop vorerst deaktiviert — nur Gradient + DNA)
     this._bindSelectionUI();
     this._bindContextMenu();
+    this._bindDeckMenu();
 
     store.on('deck', () => {
       this.renderThumbs();
@@ -309,6 +310,69 @@ export class UI {
         };
       });
     };
+  }
+
+  // ---- Deck-Menü: einfügen / Teilen-Link / kopieren -------------------
+  _bindDeckMenu() {
+    const btn = document.getElementById('deckBtn');
+    const menu = document.getElementById('deckMenu');
+    if (!btn) return;
+    btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle('open'); };
+    document.addEventListener('click', () => menu.classList.remove('open'));
+    menu.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-deck]'); if (!b) return;
+      menu.classList.remove('open');
+      if (b.dataset.deck === 'paste') this._openDeckModal();
+      else if (b.dataset.deck === 'link') this._copyShareLink();
+      else if (b.dataset.deck === 'copy') this._copyText(this.store.exportJSON(), 'deck.json kopiert');
+    });
+
+    const modal = document.getElementById('deckModal');
+    const ta = document.getElementById('deckPaste');
+    document.getElementById('deckCancel').onclick = () => modal.classList.remove('active');
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+    document.getElementById('deckLoad').onclick = async () => {
+      const text = ta.value.trim();
+      if (!text) return;
+      try { await this._loadDeckJSON(text); modal.classList.remove('active'); this._toast('Deck geladen', 'success'); }
+      catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
+    };
+  }
+  _openDeckModal() {
+    const m = document.getElementById('deckModal');
+    document.getElementById('deckPaste').value = '';
+    m.classList.add('active');
+    setTimeout(() => document.getElementById('deckPaste').focus(), 0);
+  }
+  async _loadDeckJSON(text) {
+    const obj = JSON.parse(text);                 // wirft bei ungültigem JSON
+    this.store.loadDeck(obj);
+    this._assignFolderBackgrounds();              // Hintergrund/Overlay automatisch belegen
+    await preloadDeckAssets(this.store.deck);
+    this.renderer.fit();
+    this.renderThumbs();
+  }
+  // Wie applyFolderBackgrounds in main.js, aber zur Laufzeit (Paste/Link).
+  _assignFolderBackgrounds() {
+    const { backgrounds, overlays } = this.folder;
+    this.store.deck.slides.forEach((s, i) => {
+      if ((!s.background?.assetId || !getAsset(s.background.assetId)) && backgrounds.length) {
+        s.background = { ...s.background, assetId: backgrounds[i % backgrounds.length] };
+      }
+      if ((!s.overlay?.assetId || !getAsset(s.overlay.assetId)) && overlays.length) {
+        const a = getAsset(overlays[i % overlays.length]);
+        s.overlay = { assetId: overlays[i % overlays.length], opacity: a?.defaultOpacity ?? 0.45, blend: a?.blend || 'source-over' };
+      }
+    });
+  }
+  _deckToLink() {
+    const b64 = btoa(unescape(encodeURIComponent(this.store.exportJSON())));
+    return location.origin + location.pathname + '#deck=' + encodeURIComponent(b64);
+  }
+  async _copyShareLink() { this._copyText(this._deckToLink(), 'Teilen-Link kopiert'); }
+  async _copyText(text, okMsg) {
+    try { await navigator.clipboard.writeText(text); this._toast(okMsg, 'success'); }
+    catch { this._toast('Kopieren nicht möglich', 'error'); }
   }
 
   // Entfernt den Hintergrund des ausgewählten Artwork-Elements (Flood-Fill).
