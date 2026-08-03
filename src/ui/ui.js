@@ -1,0 +1,421 @@
+// Schlanke UI: Toolbar (Format, Undo/Redo, Safe, +Slide, Export), Thumbnail-Streifen
+// mit Drag-Reorder + Hover-Aktionen, und eine Asset-Leiste unten als Drag-Quelle.
+// KEIN Inspector, KEIN JSON — alles passiert direkt auf der Slide.
+
+import { FORMATS } from '../model/formats.js';
+import { assetsByType, loadAssetImage, getAsset, getLoadedImage } from '../model/assets.js';
+import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
+import { removeBackground } from '../render/bg-remove.js';
+import { OffscreenRenderer } from '../export/offscreen.js';
+import { exportCurrentPNG, exportAllPNG } from '../export/png.js';
+import { exportPDF } from '../export/pdf.js';
+import { exportMP4, mp4Supported } from '../export/mp4.js';
+
+export class UI {
+  constructor(store, renderer, inlineEditor, folder) {
+    this.store = store;
+    this.renderer = renderer;
+    this.inlineEditor = inlineEditor;
+    this.folder = folder || { backgrounds: [], overlays: [], artwork: [] };
+    this.thumbRenderer = new OffscreenRenderer();
+    this._dragFrom = null;
+    this._lastSlide = store.slideIndex;
+
+    this._bindToolbar();
+    this._bindTimeline();
+    this._bindTray();
+
+    renderer.onEditText = (field) => this.inlineEditor.open(field);
+    renderer.onFrame = (t, dur) => this._syncTime(t, dur);
+    renderer.enableAssetDrop((kind, id) => {
+      if (kind === 'bg') store.setBackground(id);
+      else if (kind === 'overlay') store.setOverlay(id, getAsset(id));
+    });
+    // (Elemente-Upload/Datei-Drop vorerst deaktiviert — nur Gradient + DNA)
+    this._bindSelectionUI();
+    this._bindContextMenu();
+
+    store.on('deck', () => {
+      this.renderThumbs();
+      this._syncToolbar();
+      if (!this.renderer.playing) {
+        if (this._lastSlide !== store.slideIndex) { this._lastSlide = store.slideIndex; this.scrub.value = 0; }
+        this._updateTimeLabel();
+      }
+    });
+    store.on('format', () => { this._syncToolbar(); this.renderer.fit(); this.renderThumbs(); });
+
+    this.renderThumbs();
+    this._syncToolbar();
+  }
+
+  // ---- Toolbar ----------------------------------------------------------
+  _bindToolbar() {
+    const fmtWrap = document.getElementById('formatBtns');
+    fmtWrap.innerHTML = Object.values(FORMATS).map((f) => `<button data-format="${f.id}">${f.label}</button>`).join('');
+    fmtWrap.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-format]'); if (b) this.store.setFormat(b.dataset.format);
+    });
+    const safeBtn = document.getElementById('safeBtn');
+    safeBtn.classList.toggle('active', this.renderer.showSafe);   // Startzustand spiegeln
+    safeBtn.onclick = (e) => {
+      const on = !this.renderer.showSafe;
+      this.renderer.setSafeZones(on);
+      e.currentTarget.classList.toggle('active', on);
+    };
+
+    // Seitenübersicht ein-/ausklappen (Desktop: Spalte, Mobil: Overlay)
+    const app = document.querySelector('.app');
+    if (window.innerWidth > 640) app.classList.add('thumbs-open');
+    const tt = document.getElementById('thumbsToggle');
+    tt.classList.toggle('active', app.classList.contains('thumbs-open'));
+    tt.onclick = () => { const on = app.classList.toggle('thumbs-open'); tt.classList.toggle('active', on); };
+
+    // Hilfe-Popover
+    const helpBtn = document.getElementById('helpBtn');
+    const helpMenu = document.getElementById('helpMenu');
+    helpBtn.onclick = (e) => { e.stopPropagation(); helpMenu.classList.toggle('open'); };
+    document.addEventListener('click', () => helpMenu.classList.remove('open'));
+
+    // Export als einzelnes Kontextmenü
+    const btn = document.getElementById('exportBtn');
+    const menu = document.getElementById('exportMenu');
+    btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle('open'); };
+    document.addEventListener('click', () => menu.classList.remove('open'));
+    if (!mp4Supported()) {
+      const v = menu.querySelector('[data-export="mp4"]');
+      v.disabled = true; v.title = 'WebCodecs nötig (Chrome/Edge)';
+    }
+    menu.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-export]'); if (!b || b.disabled) return;
+      menu.classList.remove('open');
+      const k = b.dataset.export;
+      if (k === 'png') this._run('PNG', () => exportCurrentPNG(this.store));
+      else if (k === 'png-all') this._run('PNG-Set', (p) => exportAllPNG(this.store, p));
+      else if (k === 'pdf') this._run('PDF', (p) => exportPDF(this.store, p));
+      else if (k === 'mp4') this._run('Video', (p) => exportMP4(this.store, { onProgress: p }));
+    });
+  }
+  _syncToolbar() {
+    document.querySelectorAll('#formatBtns button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.format === this.store.format));
+  }
+
+  // ---- Timeline ---------------------------------------------------------
+  _bindTimeline() {
+    this.playBtn = document.getElementById('playBtn');
+    this.scrub = document.getElementById('scrub');
+    this.timeLabel = document.getElementById('timeLabel');
+    this.playBtn.onclick = () => {
+      if (this.renderer.playing) { this.renderer.pause(); this.playBtn.textContent = '▶'; }
+      else { this.renderer.play(); this.playBtn.textContent = '⏸'; }
+    };
+    this.scrub.oninput = () => {
+      if (this.renderer.playing) { this.renderer.pause(); this.playBtn.textContent = '▶'; }
+      const dur = this.renderer.slideDuration();
+      const t = (this.scrub.value / 1000) * dur;
+      this.renderer.seek(t); this._syncTime(t, dur);
+    };
+    this._updateTimeLabel();   // Startzustand: 0.0 / Gesamtdauer
+  }
+  _syncTime(t, dur) {
+    this.scrub.value = Math.round((t / dur) * 1000);
+    this.timeLabel.textContent = `${t.toFixed(1)} / ${dur.toFixed(1)}s`;
+  }
+  // Zeigt aktuelle Position / Gesamtdauer der Slide-Animation.
+  _updateTimeLabel() {
+    const dur = this.renderer.slideDuration();
+    const t = (this.scrub.value / 1000) * dur;
+    this.timeLabel.textContent = `${t.toFixed(1)} / ${dur.toFixed(1)}s`;
+  }
+
+  // ---- Thumbnails (Drag-Reorder + Hover-Aktionen) ----------------------
+  renderThumbs() {
+    const wrap = document.getElementById('thumbs');
+    wrap.innerHTML = '';
+    this.store.deck.slides.forEach((slide, i) => {
+      const el = document.createElement('div');
+      el.className = 'thumb' + (i === this.store.slideIndex ? ' active' : '');
+      el.draggable = true;
+      const url = this.thumbRenderer.thumbDataURL(slide, this.store.deck, this.store.format, 150);
+      el.innerHTML = `<span class="thumb-idx">${i + 1}</span>
+        <img src="${url}" alt="">
+        <div class="thumb-actions">
+          <button data-dup title="Duplizieren">⧉</button>
+          <button data-del title="Löschen">✕</button>
+        </div>`;
+      el.onclick = (e) => {
+        if (e.target.closest('button')) return;
+        this.store.goTo(i);
+        if (window.innerWidth <= 640) document.querySelector('.app').classList.remove('thumbs-open');
+      };
+      el.querySelector('[data-dup]').onclick = (e) => { e.stopPropagation(); this._dupSlide(i); };
+      el.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); this._delSlide(i); };
+      el.ondragstart = (e) => { this._dragFrom = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'slide'); };
+      el.ondragover = (e) => { e.preventDefault(); el.classList.add('drop'); };
+      el.ondragleave = () => el.classList.remove('drop');
+      el.ondrop = (e) => {
+        e.preventDefault(); el.classList.remove('drop');
+        if (this._dragFrom != null && this._dragFrom !== i) this.store.reorderSlides(this._dragFrom, i);
+        this._dragFrom = null;
+      };
+      wrap.appendChild(el);
+    });
+
+    const add = document.createElement('button');
+    add.className = 'thumb-add'; add.textContent = '+'; add.title = 'Neue Folie';
+    add.onclick = () => this._addSlide();
+    wrap.appendChild(add);
+  }
+
+  // ---- Asset-Leiste (Drag-Quelle + Klick) ------------------------------
+  _bindTray() {
+    // Drei öffnenbare Menüs: Hintergrund / Overlay / Artwork
+    this._buildPicker('background', 'background', 'backgrounds', { onPick: (id) => this.store.setBackground(id) });
+    this._buildPicker('overlay', 'overlay', 'overlays', { none: true, onPick: (id) => this.store.setOverlay(id, id ? getAsset(id) : null) });
+    this._buildPicker('artwork', 'decor', 'artwork', { art: true, onPick: async (id) => {
+      await loadAssetImage(id);            // Bild bereitstellen, dann als Element einfügen
+      this.store.addDecor(id, 0.5, 0.5);
+    } });
+
+    document.querySelectorAll('.picker-btn').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const panel = document.getElementById('panel-' + btn.dataset.cat);
+        const wasOpen = panel.classList.contains('open');
+        this._closePickers();
+        if (!wasOpen) panel.classList.add('open');
+      };
+    });
+    document.addEventListener('click', () => this._closePickers());
+
+    // Textfarbe: Marken-Swatches + eigener Farbwähler
+    const txtWrap = document.getElementById('trayText');
+    if (txtWrap) {
+      txtWrap.innerHTML = TEXT_COLORS.map((c) =>
+        `<button class="chip color" data-hex="${c.hex}" title="${c.id}" style="background:${c.hex}"></button>`).join('')
+        + `<label class="chip color custom" title="Eigene Farbe"><input type="color" id="txtCustom"></label>`;
+      txtWrap.addEventListener('click', (e) => {
+        const c = e.target.closest('.chip.color'); if (c && c.dataset.hex) this.store.setTextColor(c.dataset.hex);
+      });
+      const custom = txtWrap.querySelector('#txtCustom');
+      custom.value = DEFAULT_TEXT_COLOR;
+      custom.oninput = () => { this.store.applyTextColor(custom.value); this.store.touch(); this.renderer.rebuild(); };
+      custom.onchange = () => this.store.commit('textcolor');
+    }
+  }
+
+  // Baut ein Asset-Menü (scrollbares Raster) für eine Kategorie.
+  _buildPicker(cat, assetType, folderName, opts = {}) {
+    const panel = document.getElementById('panel-' + cat);
+    if (!panel) return;
+    const items = assetsByType(assetType);
+    let grid = '<div class="picker-grid">';
+    if (opts.none) grid += `<button class="picker-item none" data-none title="keine">&#8709;</button>`;
+    items.forEach((a) => {
+      const cls = 'picker-item' + (opts.art ? ' art' : ' cover');
+      grid += `<button class="${cls}" data-id="${a.id}" title="${a.label || ''}"><img src="${a.src}" loading="lazy" alt=""></button>`;
+    });
+    grid += '</div>';
+    panel.innerHTML = (items.length || opts.none)
+      ? grid
+      : `<div class="picker-empty">Keine Dateien im Ordner<br>assets/${folderName}</div>`;
+
+    panel.onclick = (e) => {
+      const it = e.target.closest('.picker-item'); if (!it) return;
+      opts.onPick(it.dataset.none !== undefined ? null : it.dataset.id);
+      this._closePickers();
+    };
+  }
+  _closePickers() {
+    document.querySelectorAll('.picker-panel.open').forEach((p) => p.classList.remove('open'));
+  }
+
+  // ---- Auswahl: schwebender Lösch-Button --------------------------------
+  _bindSelectionUI() {
+    const btn = document.createElement('button');
+    btn.className = 'elem-delete';
+    btn.title = 'Element entfernen (oder Entf-Taste)';
+    btn.textContent = '✕';
+    btn.style.display = 'none';
+    document.body.appendChild(btn);
+    this.delBtn = btn;
+
+    btn.onmousedown = (e) => e.preventDefault();   // Auswahl nicht verlieren
+    btn.onclick = () => {
+      const sel = this.store.selection;
+      if (sel?.kind === 'decor') this.store.removeDecor(sel.id);
+      else if (sel?.kind === 'logo') { this.store.deck.brand.show = false; this.store.selection = null; this.store.commit('logo-hide'); }
+    };
+
+    // Background-Eraser (nur für Artwork/Decor)
+    const erase = document.createElement('button');
+    erase.className = 'elem-erase';
+    erase.title = 'Hintergrund entfernen';
+    erase.innerHTML = '<svg width="13" height="13" viewBox="0 0 12 12"><rect x="0" y="0" width="6" height="6" fill="currentColor"/><rect x="6" y="6" width="6" height="6" fill="currentColor"/></svg>';
+    erase.style.display = 'none';
+    document.body.appendChild(erase);
+    this.eraseBtn = erase;
+    erase.onmousedown = (e) => e.preventDefault();
+    erase.onclick = () => this._eraseBackground();
+
+    this.renderer.onSelectionRect = (rect, kind) => {
+      if (!rect || (kind !== 'decor' && kind !== 'logo')) { btn.style.display = 'none'; erase.style.display = 'none'; return; }
+      btn.style.display = 'flex';
+      btn.style.left = (rect.left + rect.width - 12) + 'px';
+      btn.style.top = (rect.top - 14) + 'px';
+      if (kind === 'decor') {
+        erase.style.display = 'flex';
+        erase.style.left = (rect.left + rect.width - 42) + 'px';
+        erase.style.top = (rect.top - 14) + 'px';
+      } else { erase.style.display = 'none'; }
+    };
+  }
+
+  // Rechtsklick-Kontextmenü für Artwork: Ebene ändern / entfernen.
+  _bindContextMenu() {
+    const m = document.createElement('div');
+    m.className = 'ctx-menu';
+    m.style.display = 'none';
+    document.body.appendChild(m);
+    this.ctxMenu = m;
+    m.onmousedown = (e) => e.preventDefault();
+    document.addEventListener('click', () => { m.style.display = 'none'; });
+
+    const ORDER = ['back', 'mid', 'front'];   // hinter Overlay · Standard · vor Text
+    this.renderer.onDecorContext = (id, x, y) => {
+      const d = this.store.slide.decor.find((dd) => dd.id === id);
+      const L = ORDER.includes(d?.layer) ? d.layer : 'mid';
+      const i = ORDER.indexOf(L);
+      const atFront = L === 'front', atBack = L === 'back';
+      const item = (label, target, disabled) =>
+        `<button data-target="${target}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+      m.innerHTML =
+        item('In den Vordergrund', 'front', atFront)
+        + item('Nach vorne', ORDER[Math.min(i + 1, 2)], atFront)
+        + item('Nach hinten', ORDER[Math.max(i - 1, 0)], atBack)
+        + item('In den Hintergrund', 'back', atBack)
+        + `<div class="ctx-sep"></div>`
+        + `<button data-act="delete" class="danger">Entfernen</button>`;
+      m.style.display = 'block';
+      m.style.left = Math.min(x, window.innerWidth - 210) + 'px';
+      m.style.top = Math.min(y, window.innerHeight - 210) + 'px';
+      m.querySelectorAll('button').forEach((b) => {
+        b.onclick = () => {
+          if (b.disabled) return;
+          if (b.dataset.act === 'delete') this.store.removeDecor(id);
+          else this.store.setDecorLayer(id, b.dataset.target);
+          m.style.display = 'none';
+        };
+      });
+    };
+  }
+
+  // Entfernt den Hintergrund des ausgewählten Artwork-Elements (Flood-Fill).
+  async _eraseBackground() {
+    const sel = this.store.selection;
+    if (sel?.kind !== 'decor') return;
+    const decor = this.store.slide.decor.find((d) => d.id === sel.id);
+    if (!decor) return;
+    const img = getLoadedImage(decor.assetId);
+    if (!img) return;
+    try {
+      const { src, w, h } = removeBackground(img);
+      const id = 'art-nobg-' + Math.random().toString(36).slice(2, 7);
+      this.store.addCustomAsset({ id, type: 'decor', src, w, h });
+      await loadAssetImage(id);
+      decor.assetId = id;
+      this.store.commit('remove-bg');
+      this._toast('Hintergrund entfernt', 'success');
+    } catch (e) { console.error(e); this._toast('Hintergrund entfernen fehlgeschlagen', 'error'); }
+  }
+
+  // ---- Uploads (eigene Bilder als Element / Logo) ----------------------
+  _pickFiles(cb) {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = 'image/*'; i.multiple = true;
+    i.onchange = () => { if (i.files.length) cb([...i.files]); };
+    i.click();
+  }
+  readImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => {
+        const img = new Image();
+        img.onload = () => resolve({ src: fr.result, w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = reject; img.src = fr.result;
+      };
+      fr.onerror = reject; fr.readAsDataURL(file);
+    });
+  }
+  async _importFiles(files, x, y, onLogo) {
+    let i = 0;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const { src, w, h } = await this.readImageFile(file);
+        const id = 'up_' + Math.random().toString(36).slice(2, 9);
+        this.store.addCustomAsset({ id, type: onLogo && i === 0 ? 'logo' : 'decor', src, w, h });
+        await loadAssetImage(id);                    // Bild für Render/Export bereitstellen
+        if (onLogo && i === 0) this.store.setLogoAsset(id);
+        else this.store.addDecor(id, Math.min(0.92, x + i * 0.05), y);
+        i++;
+      } catch (e) { console.error(e); this._toast('Bild konnte nicht geladen werden', 'error'); }
+    }
+    this._bindTray();                                 // neue Chips in der Leiste zeigen
+    this._toast(onLogo ? 'Logo ersetzt' : `${i} Element${i === 1 ? '' : 'e'} hinzugefügt`, 'success');
+  }
+
+  // ---- Slide-Ops --------------------------------------------------------
+  _blank() {
+    return { role: 'item', kicker: 'Kicker', headline: 'Neue Headline', subline: 'Subzeile',
+      body: 'Neuer Text.', scrim: 0.22, decor: [], pos: {} };
+  }
+  _norm(s) { return { id: 's_' + Math.random().toString(36).slice(2, 8), overlay: null, motion: null, ...s,
+    background: { fit: 'cover', kenburns: true, ...s.background } }; }
+  _addSlide() {
+    const i = this.store.slideIndex + 1;
+    const { backgrounds: g, overlays: d } = this.folder;
+    const s = this._norm(this._blank());
+    if (g.length) s.background = { fit: 'cover', kenburns: true, assetId: g[i % g.length] };
+    if (d.length) { const a = getAsset(d[i % d.length]); s.overlay = { assetId: d[i % d.length], opacity: a?.defaultOpacity ?? 0.45, blend: a?.blend || 'source-over' }; }
+    this.store.deck.slides.splice(i, 0, s);
+    this.store.slideIndex = i; this.store.commit('add-slide');
+  }
+  _dupSlide(i) {
+    const copy = JSON.parse(JSON.stringify(this.store.deck.slides[i]));
+    copy.id = 's_' + Math.random().toString(36).slice(2, 8);
+    (copy.decor || []).forEach((d) => (d.id = 'decor_' + Math.random().toString(36).slice(2, 8)));
+    this.store.deck.slides.splice(i + 1, 0, copy);
+    this.store.slideIndex = i + 1; this.store.commit('dup-slide');
+  }
+  _delSlide(i) {
+    if (this.store.deck.slides.length <= 1) return this._toast('Mindestens eine Slide nötig', 'error');
+    this.store.deck.slides.splice(i, 1);
+    if (this.store.slideIndex >= this.store.deck.slides.length) this.store.slideIndex--;
+    this.store.commit('del-slide');
+  }
+
+  // ---- Export-Fortschritt / Toast --------------------------------------
+  async _run(label, fn) {
+    const bar = document.getElementById('progress');
+    const fill = document.getElementById('progressFill');
+    const txt = document.getElementById('progressTxt');
+    bar.classList.add('active'); fill.style.width = '0%'; txt.textContent = `${label} …`;
+    try { await fn((p) => { fill.style.width = Math.round(p * 100) + '%'; }); this._toast(`${label} exportiert`, 'success'); }
+    catch (err) { console.error(err); this._toast(err.message || `${label} fehlgeschlagen`, 'error'); }
+    finally { setTimeout(() => bar.classList.remove('active'), 400); }
+  }
+  _toast(msg, type = 'success') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type; t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+  }
+}
+
+function dominant(id) {
+  const map = { 'bg-radunff': '#1e3f49', 'bg-teal-deep': '#123038', 'bg-teal-bright': '#215863',
+    'bg-cool-deep': '#12263f', 'bg-violet': '#3b2560', 'bg-warm-dusk': '#5a2038', 'bg-slate': '#242833' };
+  return map[id] || '#1a2b4c';
+}
