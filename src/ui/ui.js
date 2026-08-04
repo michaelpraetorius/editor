@@ -5,6 +5,7 @@
 import { FORMATS } from '../model/formats.js';
 import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets, registerCustomAsset } from '../model/assets.js';
 import { generateDeck, MODELS, DEFAULT_MODEL } from '../ai/generate.js';
+import { startOpenRouterLogin, getOrKey, clearOrKey, fetchClaudeModels, DEFAULT_OR_MODEL } from '../ai/openrouter.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
@@ -378,48 +379,51 @@ export class UI {
       catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
     };
   }
-  // ---- KI: Folien mit Claude erzeugen (eigener Key, direkt im Browser) --
+  // ---- KI: Folien mit Claude erzeugen (Login per OpenRouter oder eigener Key) --
   _bindGenerate() {
     const btn = document.getElementById('genBtn');
     const modal = document.getElementById('genModal');
     if (!btn || !modal) return;
     const $ = (id) => document.getElementById(id);
+    this._orModels = null;   // Cache der OpenRouter-Claude-Modelle
 
-    // Modell-Auswahl füllen
-    const sel = $('genModel');
-    sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
-    sel.value = sessionStorage.getItem('cpe.aiModel') || DEFAULT_MODEL;
+    // Login / Verbindung
+    $('orLogin').onclick = () => { this._toast('Weiterleitung zu OpenRouter …', 'info'); startOpenRouterLogin(); };
+    $('orLogout').onclick = () => { clearOrKey(); this._refreshConn(); };
+    const mtoggle = $('orManualToggle');
+    mtoggle.onclick = () => { const box = $('orManual'); box.hidden = !box.hidden; };
 
     // Ausklapp-Hilfe „Woher bekomme ich den Key?"
     const help = $('genKeyHelp'), helpBox = $('genKeyHelpBox');
-    const setHelp = (open) => { helpBox.hidden = !open; help.textContent = open ? 'Woher bekomme ich den? ▴' : 'Woher bekomme ich den? ▾'; };
-    if (help) help.onclick = (e) => { e.preventDefault(); setHelp(helpBox.hidden); };
+    const setHelp = (open) => { helpBox.hidden = !open; help.textContent = open ? 'Woher? ▴' : 'Woher? ▾'; };
+    help.onclick = (e) => { e.preventDefault(); setHelp(helpBox.hidden); };
 
     btn.onclick = () => {
-      const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
-      $('genKey').value = savedKey;                       // Key nur für diese Sitzung
-      setHelp(!savedKey);                                 // Erstnutzer: Anleitung gleich offen
+      $('genKey').value = sessionStorage.getItem('cpe.aiKey') || '';
+      this._refreshConn();
       modal.classList.add('active');
-      setTimeout(() => (savedKey ? $('genThema') : $('genKey')).focus(), 0);
+      setTimeout(() => $('genThema').focus(), 0);
     };
     $('genCancel').onclick = () => modal.classList.remove('active');
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
 
     const run = $('genRun');
     run.onclick = async () => {
-      const apiKey = $('genKey').value.trim();
+      const orKey = getOrKey();
+      const manualKey = $('genKey').value.trim();
+      const apiKey = orKey || manualKey;
       const thema = $('genThema').value.trim();
-      if (!apiKey) { this._toast('Bitte API-Key eingeben', 'error'); $('genKey').focus(); return; }
+      if (!apiKey) { this._toast('Bitte anmelden oder API-Key eingeben', 'error'); $('orManual').hidden = false; $('genKey').focus(); return; }
       if (!thema)  { this._toast('Bitte ein Thema eingeben', 'error'); $('genThema').focus(); return; }
 
-      sessionStorage.setItem('cpe.aiKey', apiKey);       // nur Sitzung, weg beim Schließen
-      sessionStorage.setItem('cpe.aiModel', sel.value);
+      if (!orKey && manualKey) sessionStorage.setItem('cpe.aiKey', manualKey);  // nur Sitzung
+      sessionStorage.setItem('cpe.aiModel', $('genModel').value);
 
       const anzahl = parseInt($('genCount').value, 10);
       run.disabled = true; const label = run.textContent; run.textContent = 'Generiere …';
       try {
         const deck = await generateDeck({
-          apiKey, model: sel.value, thema,
+          apiKey, model: $('genModel').value, thema,
           zielgruppe: $('genZiel').value.trim(),
           tonalitaet: $('genTon').value.trim(),
           struktur: $('genStruktur').value.trim(),
@@ -435,6 +439,39 @@ export class UI {
         run.disabled = false; run.textContent = label;
       }
     };
+  }
+
+  // Verbindungs-Zustand + passende Modell-Liste in den Dialog spiegeln.
+  async _refreshConn() {
+    const $ = (id) => document.getElementById(id);
+    const orKey = getOrKey();
+    $('orLogin').hidden = !!orKey;
+    $('orStatus').hidden = !orKey;
+    $('orNote').hidden = !!orKey;
+    if (orKey) $('orManual').hidden = true;
+
+    const sel = $('genModel');
+    const saved = sessionStorage.getItem('cpe.aiModel');
+    if (orKey) {
+      if (!this._orModels) {
+        sel.innerHTML = '<option>lädt …</option>';
+        this._orModels = await fetchClaudeModels();
+      }
+      sel.innerHTML = this._orModels.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
+      sel.value = (saved && this._orModels.some((m) => m.id === saved)) ? saved : DEFAULT_OR_MODEL;
+    } else {
+      sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
+      sel.value = (saved && MODELS.some((m) => m.id === saved)) ? saved : DEFAULT_MODEL;
+    }
+  }
+
+  // Nach erfolgreichem OpenRouter-Login (Rücksprung mit ?code=): Dialog öffnen.
+  afterOpenRouterLogin() {
+    const modal = document.getElementById('genModal');
+    this._refreshConn();
+    modal.classList.add('active');
+    this._toast('Mit OpenRouter verbunden', 'success');
+    setTimeout(() => document.getElementById('genThema').focus(), 0);
   }
   _openDeckModal() {
     const m = document.getElementById('deckModal');

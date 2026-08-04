@@ -6,6 +6,7 @@ import { UI } from './ui/ui.js';
 import { preloadAll, preloadDeckAssets, getAsset } from './model/assets.js';
 import { loadExternalAssets } from './model/external-assets.js';
 import { BRAND_DISPLAY } from './model/brand.js';
+import { completeOpenRouterLogin } from './ai/openrouter.js';
 
 // Belegt jede Slide mit einem Gradient (z0) + einer DNA (z10) aus dem Ordner,
 // sofern noch nicht (gültig) gesetzt. Rundlauf über die vorhandenen Dateien.
@@ -76,6 +77,9 @@ async function loadInitialDeck(store) {
 }
 
 async function boot() {
+  // OpenRouter-Rücksprung (?code=) früh einlösen, bevor die URL anderweitig genutzt wird.
+  const orKey = await completeOpenRouterLogin();
+
   // Schriften müssen für Canvas-Textsatz bereitstehen (Konzept 8.2).
   if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch {} }
   await preloadAll();
@@ -92,6 +96,7 @@ async function boot() {
   const renderer = new Renderer(stageEl, store);
   const inlineEditor = new InlineEditor(store, renderer);
   const ui = new UI(store, renderer, inlineEditor, folder);
+  if (orKey) ui.afterOpenRouterLogin();          // frisch eingeloggt → KI-Dialog öffnen
 
   // Rebuild bei Deck-Änderung, Selektions-Highlight bei Auswahländerung
   store.on('deck', () => renderer.rebuild());

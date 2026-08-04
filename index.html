@@ -138,21 +138,34 @@
   <div class="modal" id="genModal">
     <div class="modal-box">
       <div class="modal-title">Folien mit KI erzeugen</div>
-      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau. Dein API-Key bleibt im Browser (nur diese Sitzung) und wird nirgends gespeichert.</p>
-      <div class="gen-grid">
-        <div class="gen-field gen-wide">
-          <span>Anthropic API-Key <button type="button" id="genKeyHelp" class="gen-help-toggle">Woher bekomme ich den? ▾</button></span>
-          <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
-          <div class="gen-help" id="genKeyHelpBox" hidden>
-            <ol>
-              <li>Bei <b>console.anthropic.com</b> anmelden – oder kostenlos registrieren.</li>
-              <li>Unter <b>Billing</b> etwas Guthaben aufladen (geht ab wenigen $ – eine Deck-Generierung kostet nur Cent-Beträge).</li>
-              <li><b>API keys → Create Key</b>, den Schlüssel kopieren und hier einfügen.</li>
-            </ol>
-            <a class="gen-console-btn" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic-Konsole öffnen ↗</a>
-            <p class="gen-help-note">Der Key bleibt in deinem Browser (nur diese Sitzung) und geht an niemanden außer Anthropic.</p>
+      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau. Deine KI-Verbindung bleibt im Browser (nur diese Sitzung) und wird nirgends gespeichert.</p>
+
+      <!-- Verbindung: Login per OpenRouter (kein Key-Kopieren) oder eigener API-Key -->
+      <div class="gen-conn">
+        <button type="button" id="orLogin" class="gen-or-btn">🔗 Mit OpenRouter anmelden</button>
+        <div id="orStatus" class="gen-conn-ok" hidden>
+          <span>✓ Mit OpenRouter verbunden</span>
+          <button type="button" id="orLogout" class="gen-link">Trennen</button>
+        </div>
+        <p class="gen-conn-note" id="orNote">Login-Fenster von OpenRouter – du zahlst über dein OpenRouter-Guthaben, kein Key-Kopieren. <button type="button" id="orManualToggle" class="gen-help-toggle">oder eigenen API-Key ▾</button></p>
+        <div id="orManual" hidden>
+          <div class="gen-field gen-wide">
+            <span>API-Key <span class="gen-opt">(Anthropic sk-ant… oder OpenRouter sk-or…)</span> <button type="button" id="genKeyHelp" class="gen-help-toggle">Woher? ▾</button></span>
+            <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-… / sk-or-…" />
+            <div class="gen-help" id="genKeyHelpBox" hidden>
+              <ol>
+                <li>Bei <b>console.anthropic.com</b> anmelden – oder kostenlos registrieren.</li>
+                <li>Unter <b>Billing</b> etwas Guthaben aufladen (geht ab wenigen $ – eine Deck-Generierung kostet nur Cent-Beträge).</li>
+                <li><b>API keys → Create Key</b>, den Schlüssel kopieren und hier einfügen.</li>
+              </ol>
+              <a class="gen-console-btn" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic-Konsole öffnen ↗</a>
+              <p class="gen-help-note">Der Key bleibt in deinem Browser (nur diese Sitzung) und geht an niemanden außer dem Anbieter.</p>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div class="gen-grid">
         <label class="gen-field">
           <span>Modell</span>
           <select id="genModel"></select>
