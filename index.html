@@ -59,10 +59,12 @@
         <div class="menu-wrap">
           <button id="deckBtn">Deck ▾</button>
           <div class="menu" id="deckMenu">
-            <button data-deck="paste">Deck einfügen …</button>
+            <button data-deck="import">Deck importieren …</button>
+            <button data-deck="paste">Deck einfügen (Text) …</button>
             <button data-deck="link">Teilen-Link kopieren</button>
             <button data-deck="copy">deck.json kopieren</button>
           </div>
+          <input type="file" id="deckFile" accept=".json,application/json" hidden />
         </div>
         <div class="menu-wrap">
           <button id="exportBtn" class="primary">Export ▾</button>

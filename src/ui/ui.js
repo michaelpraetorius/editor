@@ -3,7 +3,7 @@
 // KEIN Inspector, KEIN JSON — alles passiert direkt auf der Slide.
 
 import { FORMATS } from '../model/formats.js';
-import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets } from '../model/assets.js';
+import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets, registerCustomAsset } from '../model/assets.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
@@ -212,21 +212,50 @@ export class UI {
     if (!panel) return;
     const items = assetsByType(assetType);
     let grid = '<div class="picker-grid">';
+    // Eigene Dateien hinzufügen (nur in dieser Sitzung, nichts wird gespeichert)
+    grid += `<label class="picker-item upload" title="Eigene Dateien hinzufügen – nur in dieser Sitzung"><span>+</span><input type="file" accept="image/*" multiple hidden></label>`;
     if (opts.none) grid += `<button class="picker-item none" data-none title="keine">&#8709;</button>`;
     items.forEach((a) => {
       const cls = 'picker-item' + (opts.art ? ' art' : ' cover');
       grid += `<button class="${cls}" data-id="${a.id}" title="${a.label || ''}"><img src="${a.src}" loading="lazy" alt=""></button>`;
     });
     grid += '</div>';
-    panel.innerHTML = (items.length || opts.none)
-      ? grid
-      : `<div class="picker-empty">Keine Dateien im Ordner<br>assets/${folderName}</div>`;
+    panel.innerHTML = grid;
+
+    const fileInput = panel.querySelector('.upload input[type=file]');
+    if (fileInput) fileInput.onchange = () => {
+      this._addUploadedAssets(cat, assetType, folderName, opts, fileInput.files);
+      fileInput.value = '';                       // gleiche Datei erneut wählbar
+    };
 
     panel.onclick = (e) => {
+      if (e.target.closest('.picker-item.upload')) { e.stopPropagation(); return; }  // Datei-Dialog macht das <label>
       const it = e.target.closest('.picker-item'); if (!it) return;
       opts.onPick(it.dataset.none !== undefined ? null : it.dataset.id);
       this._closePickers();
     };
+  }
+  // Eigene Assets aus Dateien registrieren – nur im Speicher (blob:), weg beim Neuladen/Schließen.
+  async _addUploadedAssets(cat, assetType, folderName, opts, fileList) {
+    const files = [...(fileList || [])].filter((f) => /^image\//.test(f.type));
+    if (!files.length) return;
+    const prefix = assetType === 'background' ? 'bg' : assetType === 'overlay' ? 'ov' : 'art';
+    const extra = assetType === 'overlay' ? { blend: 'source-over', defaultOpacity: 0.45 }
+                : assetType === 'decor'   ? { transparent: true } : {};
+    const ids = [];
+    for (const f of files) {
+      this._uploadSeq = (this._uploadSeq || 0) + 1;
+      const base = f.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      const id = `${prefix}-up-${this._uploadSeq}-${base}`;
+      registerCustomAsset({ id, type: assetType, src: URL.createObjectURL(f), label: f.name.replace(/\.[^.]+$/, ''), external: true, uploaded: true, ...extra });
+      ids.push(id);
+    }
+    await Promise.all(ids.map((id) => loadAssetImage(id)));
+    // Hochgeladene Hintergründe/Overlays auch fürs Auto-Belegen beim Deck-Import verfügbar machen.
+    if (this.folder[folderName]) this.folder[folderName].push(...ids);
+    this._buildPicker(cat, assetType, folderName, opts);
+    document.getElementById('panel-' + cat)?.classList.add('open');
+    this._toast(`${ids.length} ${ids.length === 1 ? 'Datei' : 'Dateien'} hinzugefügt`, 'success');
   }
   _closePickers() {
     document.querySelectorAll('.picker-panel.open').forEach((p) => p.classList.remove('open'));
@@ -322,10 +351,19 @@ export class UI {
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('[data-deck]'); if (!b) return;
       menu.classList.remove('open');
-      if (b.dataset.deck === 'paste') this._openDeckModal();
+      if (b.dataset.deck === 'import') this._pickDeckFile();
+      else if (b.dataset.deck === 'paste') this._openDeckModal();
       else if (b.dataset.deck === 'link') this._copyShareLink();
       else if (b.dataset.deck === 'copy') this._copyText(this.store.exportJSON(), 'deck.json kopiert');
     });
+
+    // Datei-Dialog (Deck importieren …)
+    const file = document.getElementById('deckFile');
+    if (file) file.onchange = async () => {
+      const f = file.files?.[0]; file.value = '';        // reset -> gleiche Datei erneut wählbar
+      if (f) await this._loadDeckFile(f);
+    };
+    this._bindDeckDrop();      // deck.json irgendwo in die App ziehen
 
     const modal = document.getElementById('deckModal');
     const ta = document.getElementById('deckPaste');
@@ -351,6 +389,47 @@ export class UI {
     await preloadDeckAssets(this.store.deck);
     this.renderer.fit();
     this.renderThumbs();
+  }
+  // --- Import: Datei-Dialog, Datei-Drop, Zwischenablage (Cmd+V) ----------
+  _pickDeckFile() { document.getElementById('deckFile')?.click(); }
+  async _loadDeckFile(file) {
+    try {
+      const text = await file.text();
+      await this._loadDeckJSON(text);
+      this._toast(`„${file.name}" geladen`, 'success');
+    } catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
+  }
+  // Sieht ein Text nach einem Deck aus? (grobe Prüfung vor dem Laden)
+  _looksLikeDeck(text) {
+    const t = (text || '').trim();
+    if (t[0] !== '{') return false;
+    try { const o = JSON.parse(t); return !!o && Array.isArray(o.slides); } catch { return false; }
+  }
+  _bindDeckDrop() {
+    const app = document.querySelector('.app') || document.body;
+    const isJsonDrag = (e) => [...(e.dataTransfer?.items || [])]
+      .some((it) => it.kind === 'file' && (it.type === 'application/json' || it.type === ''));
+    app.addEventListener('dragover', (e) => {
+      if (!isJsonDrag(e)) return;            // Asset-Drops auf die Bühne nicht stören
+      e.preventDefault(); app.classList.add('deck-drop');
+    });
+    app.addEventListener('dragleave', (e) => { if (e.target === app) app.classList.remove('deck-drop'); });
+    app.addEventListener('drop', async (e) => {
+      const f = [...(e.dataTransfer?.files || [])].find((x) => /\.json$/i.test(x.name) || x.type === 'application/json');
+      if (!f) return;
+      e.preventDefault(); app.classList.remove('deck-drop');
+      await this._loadDeckFile(f);
+    });
+    // Cmd/Ctrl+V: Deck aus der Zwischenablage laden (nur wenn nicht getippt wird)
+    document.addEventListener('paste', async (e) => {
+      const tag = document.activeElement?.tagName;
+      if (this.inlineEditor?.field != null || tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const text = e.clipboardData?.getData('text');
+      if (!this._looksLikeDeck(text)) return;
+      e.preventDefault();
+      try { await this._loadDeckJSON(text); this._toast('Deck aus Zwischenablage geladen', 'success'); }
+      catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
+    });
   }
   // Wie applyFolderBackgrounds in main.js, aber zur Laufzeit (Paste/Link).
   _assignFolderBackgrounds() {
