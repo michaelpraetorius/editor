@@ -138,14 +138,14 @@
   <div class="modal" id="genModal">
     <div class="modal-box">
       <div class="modal-title">Folien mit KI erzeugen</div>
-      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau. Dein API-Key bleibt im Browser (nur diese Sitzung) und wird nirgends gespeichert.</p>
+      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau.</p>
       <div class="gen-grid">
         <div class="gen-field gen-wide">
-          <span>Anthropic API-Key <button type="button" id="genKeyHelp" class="gen-help-toggle">Woher bekomme ich den? ▾</button></span>
+          <span>Anthropic API-Key</span>
           <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
-          <div class="gen-help" id="genKeyHelpBox" hidden>
+          <div class="gen-help" id="genKeyHelpBox">
             <ol>
-              <li>Bei <b>console.anthropic.com</b> anmelden – oder kostenlos registrieren.</li>
+              <li>Bei <b>console.anthropic.com</b> anmelden.</li>
               <li>Unter <b>Billing</b> etwas Guthaben aufladen (geht ab wenigen $ – eine Deck-Generierung kostet nur Cent-Beträge).</li>
               <li><b>API keys → Create Key</b>, den Schlüssel kopieren und hier einfügen.</li>
             </ol>
