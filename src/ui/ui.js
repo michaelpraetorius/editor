@@ -390,10 +390,17 @@ export class UI {
     sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
     sel.value = sessionStorage.getItem('cpe.aiModel') || DEFAULT_MODEL;
 
+    // Ausklapp-Hilfe „Woher bekomme ich den Key?"
+    const help = $('genKeyHelp'), helpBox = $('genKeyHelpBox');
+    const setHelp = (open) => { helpBox.hidden = !open; help.textContent = open ? 'Woher bekomme ich den? ▴' : 'Woher bekomme ich den? ▾'; };
+    if (help) help.onclick = (e) => { e.preventDefault(); setHelp(helpBox.hidden); };
+
     btn.onclick = () => {
-      $('genKey').value = sessionStorage.getItem('cpe.aiKey') || '';   // Key nur für diese Sitzung
+      const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
+      $('genKey').value = savedKey;                       // Key nur für diese Sitzung
+      setHelp(!savedKey);                                 // Erstnutzer: Anleitung gleich offen
       modal.classList.add('active');
-      setTimeout(() => ($('genKey').value ? $('genThema') : $('genKey')).focus(), 0);
+      setTimeout(() => (savedKey ? $('genThema') : $('genKey')).focus(), 0);
     };
     $('genCancel').onclick = () => modal.classList.remove('active');
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
