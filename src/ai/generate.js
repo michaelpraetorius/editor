@@ -91,7 +91,7 @@ export async function generateDeck(opts) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        max_tokens: 3000,
         system,
         messages: [
           { role: 'user', content: userPrompt(opts) },

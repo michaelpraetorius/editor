@@ -441,11 +441,22 @@ export class UI {
     // Eingaben, die für „neu generieren" in der Sitzung gemerkt werden.
     const FIELDS = { genThema: 'cpe.aiThema', genZiel: 'cpe.aiZiel', genTon: 'cpe.aiTon', genStruktur: 'cpe.aiStruktur', genCount: 'cpe.aiCount' };
 
+    // Zeichenzähler + Längen-Limit für den Quelltext (zu lange Texte scheitern sonst).
+    const MAX_SOURCE = 8000;
+    const themaEl = $('genThema'), themaCount = $('themaCount'), errEl = $('genError');
+    const nf = (n) => n.toLocaleString('de-DE');
+    const syncCount = () => {
+      const n = themaEl.value.length;
+      themaCount.textContent = `${nf(n)} / ${nf(MAX_SOURCE)} Zeichen`;
+      themaCount.classList.toggle('over', n > MAX_SOURCE);
+    };
+    themaEl.addEventListener('input', syncCount);
+
     btn.onclick = () => {
       const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
       keyEl.value = savedKey;                             // in der Sitzung gemerkter Key
       Object.entries(FIELDS).forEach(([id, k]) => { $(id).value = sessionStorage.getItem(k) || ''; });
-      syncHelp();
+      syncHelp(); syncCount(); errEl.hidden = true;
       modal.classList.add('active');
       setTimeout(() => (savedKey ? $('genThema') : keyEl).focus(), 0);
     };
@@ -459,10 +470,15 @@ export class UI {
 
     const run = $('genRun');
     run.onclick = async () => {
+      errEl.hidden = true;
       const apiKey = $('genKey').value.trim();
       const thema = $('genThema').value.trim();
       if (!apiKey) { this._toast('Bitte API-Key eingeben', 'error'); $('genKey').focus(); return; }
       if (!thema)  { this._toast('Bitte ein Thema eingeben', 'error'); $('genThema').focus(); return; }
+      if (thema.length > MAX_SOURCE) {
+        errEl.textContent = `Der Text ist zu lang (${nf(thema.length)} Zeichen). Bitte auf höchstens ${nf(MAX_SOURCE)} Zeichen kürzen – oder nur den relevanten Abschnitt einfügen.`;
+        errEl.hidden = false; themaEl.focus(); return;
+      }
 
       sessionStorage.setItem('cpe.aiKey', apiKey);       // nur Sitzung, weg beim Schließen
       sessionStorage.setItem('cpe.aiModel', sel.value);
@@ -483,6 +499,8 @@ export class UI {
         this._toast(`${deck.slides.length} Folien erzeugt`, 'success');
       } catch (err) {
         console.error(err);
+        errEl.textContent = 'Fehler bei der Generierung: ' + (err.message || 'unbekannt');
+        errEl.hidden = false;
         this._toast('KI: ' + (err.message || 'Fehler'), 'error');
       } finally {
         run.disabled = false; run.textContent = label;

@@ -172,6 +172,7 @@
         <label class="gen-field gen-wide">
           <span>Thema / Quelltext <span class="gen-opt">(auch eine ganze Pressemitteilung – wird zusammengefasst)</span></span>
           <textarea id="genThema" rows="6" spellcheck="false" placeholder="Thema in einem Satz – oder einen kompletten Text (z. B. Pressemitteilung) hier einfügen …"></textarea>
+          <div class="gen-count" id="themaCount"></div>
         </label>
         <label class="gen-field">
           <span>Zielgruppe</span>
@@ -186,6 +187,7 @@
           <textarea id="genStruktur" rows="2" spellcheck="false" placeholder="z. B. Einstieg, 3 Tipps, Abschluss mit Call-to-Action"></textarea>
         </label>
       </div>
+      <div id="genError" class="gen-error" hidden></div>
       <div class="modal-actions">
         <button id="genReset" class="gen-reset">Felder leeren</button>
         <button id="genCancel">Abbrechen</button>
