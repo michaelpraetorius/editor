@@ -56,6 +56,7 @@
         </div>
       </div>
       <div class="group">
+        <button id="genBtn" class="primary" title="Folien mit KI erzeugen">✨ KI</button>
         <div class="menu-wrap">
           <button id="deckBtn">Deck ▾</button>
           <div class="menu" id="deckMenu">
@@ -129,6 +130,48 @@
       <div class="modal-actions">
         <button id="deckCancel">Abbrechen</button>
         <button id="deckLoad" class="primary">Laden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KI: Folien aus Thema/Zielgruppe/Tonalität/Struktur erzeugen (Claude, eigener Key) -->
+  <div class="modal" id="genModal">
+    <div class="modal-box">
+      <div class="modal-title">Folien mit KI erzeugen</div>
+      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau. Dein API-Key bleibt im Browser (nur diese Sitzung) und wird nirgends gespeichert.</p>
+      <div class="gen-grid">
+        <label class="gen-field gen-wide">
+          <span>Anthropic API-Key</span>
+          <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
+        </label>
+        <label class="gen-field">
+          <span>Modell</span>
+          <select id="genModel"></select>
+        </label>
+        <label class="gen-field">
+          <span>Anzahl Folien</span>
+          <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
+        </label>
+        <label class="gen-field gen-wide">
+          <span>Thema</span>
+          <input id="genThema" type="text" placeholder="z. B. Schlaf in den ersten Wochen" />
+        </label>
+        <label class="gen-field">
+          <span>Zielgruppe</span>
+          <input id="genZiel" type="text" placeholder="z. B. werdende Eltern" />
+        </label>
+        <label class="gen-field">
+          <span>Tonalität</span>
+          <input id="genTon" type="text" placeholder="z. B. warm, ermutigend" />
+        </label>
+        <label class="gen-field gen-wide">
+          <span>Struktur / Aufbau <span class="gen-opt">(optional)</span></span>
+          <textarea id="genStruktur" rows="2" spellcheck="false" placeholder="z. B. Einstieg, 3 Tipps, Abschluss mit Call-to-Action"></textarea>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="genCancel">Abbrechen</button>
+        <button id="genRun" class="primary">Generieren</button>
       </div>
     </div>
   </div>

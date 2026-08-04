@@ -4,6 +4,7 @@
 
 import { FORMATS } from '../model/formats.js';
 import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets, registerCustomAsset } from '../model/assets.js';
+import { generateDeck, MODELS, DEFAULT_MODEL } from '../ai/generate.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
@@ -35,6 +36,7 @@ export class UI {
     this._bindSelectionUI();
     this._bindContextMenu();
     this._bindDeckMenu();
+    this._bindGenerate();
 
     store.on('deck', () => {
       this.renderThumbs();
@@ -374,6 +376,57 @@ export class UI {
       if (!text) return;
       try { await this._loadDeckJSON(text); modal.classList.remove('active'); this._toast('Deck geladen', 'success'); }
       catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
+    };
+  }
+  // ---- KI: Folien mit Claude erzeugen (eigener Key, direkt im Browser) --
+  _bindGenerate() {
+    const btn = document.getElementById('genBtn');
+    const modal = document.getElementById('genModal');
+    if (!btn || !modal) return;
+    const $ = (id) => document.getElementById(id);
+
+    // Modell-Auswahl füllen
+    const sel = $('genModel');
+    sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
+    sel.value = sessionStorage.getItem('cpe.aiModel') || DEFAULT_MODEL;
+
+    btn.onclick = () => {
+      $('genKey').value = sessionStorage.getItem('cpe.aiKey') || '';   // Key nur für diese Sitzung
+      modal.classList.add('active');
+      setTimeout(() => ($('genKey').value ? $('genThema') : $('genKey')).focus(), 0);
+    };
+    $('genCancel').onclick = () => modal.classList.remove('active');
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+
+    const run = $('genRun');
+    run.onclick = async () => {
+      const apiKey = $('genKey').value.trim();
+      const thema = $('genThema').value.trim();
+      if (!apiKey) { this._toast('Bitte API-Key eingeben', 'error'); $('genKey').focus(); return; }
+      if (!thema)  { this._toast('Bitte ein Thema eingeben', 'error'); $('genThema').focus(); return; }
+
+      sessionStorage.setItem('cpe.aiKey', apiKey);       // nur Sitzung, weg beim Schließen
+      sessionStorage.setItem('cpe.aiModel', sel.value);
+
+      const anzahl = parseInt($('genCount').value, 10);
+      run.disabled = true; const label = run.textContent; run.textContent = 'Generiere …';
+      try {
+        const deck = await generateDeck({
+          apiKey, model: sel.value, thema,
+          zielgruppe: $('genZiel').value.trim(),
+          tonalitaet: $('genTon').value.trim(),
+          struktur: $('genStruktur').value.trim(),
+          anzahl: Number.isFinite(anzahl) && anzahl > 0 ? anzahl : null,
+        });
+        await this._loadDeckJSON(JSON.stringify(deck));   // gleicher Pfad wie Import: Assets belegen, rendern
+        modal.classList.remove('active');
+        this._toast(`${deck.slides.length} Folien erzeugt`, 'success');
+      } catch (err) {
+        console.error(err);
+        this._toast('KI: ' + (err.message || 'Fehler'), 'error');
+      } finally {
+        run.disabled = false; run.textContent = label;
+      }
     };
   }
   _openDeckModal() {
