@@ -52,6 +52,7 @@
             <div class="help-line">Klick auf ein Element wählt es aus und verschiebt es.</div>
             <div class="help-line">Doppelklick öffnet das Tippen direkt im Layout.</div>
             <div class="help-line">Für die Textfarbe erst das Element wählen, dann die Farbe.</div>
+            <div class="help-line help-meta">Stand: 04.08.2026, 17:00 Uhr (MESZ)</div>
           </div>
         </div>
       </div>
@@ -64,6 +65,15 @@
             <button data-deck="paste">Deck einfügen (Text) …</button>
           </div>
           <input type="file" id="deckFile" accept=".json,application/json" hidden />
+        </div>
+        <div class="menu-wrap">
+          <button id="resetBtn">Zurücksetzen ▾</button>
+          <div class="menu" id="resetMenu">
+            <button data-reset="inhalte">Inhalte (Texte)</button>
+            <button data-reset="grafiken">Grafiken</button>
+            <button data-reset="key">API-Key</button>
+            <button data-reset="alles" class="danger">Alles zurücksetzen</button>
+          </div>
         </div>
         <div class="menu-wrap">
           <button id="exportBtn" class="primary">Export ▾</button>

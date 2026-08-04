@@ -37,6 +37,7 @@ export class UI {
     this._bindContextMenu();
     this._bindDeckMenu();
     this._bindGenerate();
+    this._bindReset();
 
     store.on('deck', () => {
       this.renderThumbs();
@@ -376,6 +377,49 @@ export class UI {
       catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
     };
   }
+  // ---- Zurücksetzen: Inhalte / Grafiken / API-Key / Alles -------------
+  _bindReset() {
+    const btn = document.getElementById('resetBtn');
+    const menu = document.getElementById('resetMenu');
+    if (!btn) return;
+    btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle('open'); };
+    document.addEventListener('click', () => menu.classList.remove('open'));
+    menu.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-reset]'); if (!b) return;
+      menu.classList.remove('open');
+      const what = b.dataset.reset;
+      if (what === 'inhalte') this._resetContent();
+      else if (what === 'grafiken') this._resetGraphics();
+      else if (what === 'key') this._resetKey();
+      else if (what === 'alles') this._resetAll();
+    });
+  }
+  _resetContent() {
+    this.store.deck.slides.forEach((s) => { s.kicker = ''; s.headline = ''; s.subline = ''; s.body = ''; s.colors = {}; s.pos = {}; });
+    this.store.commit('reset-content');                 // Undo-fähig, rebuild via Event
+    this._toast('Inhalte zurückgesetzt (Cmd+Z macht es rückgängig)', 'success');
+  }
+  _resetGraphics() {
+    this.store.deck.slides.forEach((s) => {
+      s.background = { ...s.background, assetId: null };
+      s.overlay = null;
+      s.decor = [];
+    });
+    this._assignFolderBackgrounds();                    // Standard-Hintergrund/Overlay wieder zuweisen
+    this.store.commit('reset-graphics');
+    this._toast('Grafiken zurückgesetzt (Cmd+Z macht es rückgängig)', 'success');
+  }
+  _resetKey() {
+    sessionStorage.removeItem('cpe.aiKey');
+    sessionStorage.removeItem('cpe.aiModel');
+    this._toast('API-Key entfernt', 'success');
+  }
+  _resetAll() {
+    if (!confirm('Wirklich ALLES zurücksetzen? Inhalte, Grafiken, hochgeladene Bilder und der API-Key gehen verloren.')) return;
+    try { localStorage.clear(); sessionStorage.clear(); } catch {}
+    location.reload();
+  }
+
   // ---- KI: Folien mit Claude erzeugen (eigener Key, direkt im Browser) --
   _bindGenerate() {
     const btn = document.getElementById('genBtn');

@@ -36,19 +36,19 @@ ${limitLines}
 - Setze KEINE Hintergründe, Farben oder Assets – nur Text. Gib NUR das JSON-Objekt aus.`;
 }
 
-// Optionale, im Repo gepflegte Zusatz-Vorgaben (Negativ-Prompts / Ton).
-// Alles nach der ersten `---`-Linie in prompt-guidelines.md zählt.
-let _guidelines;
-async function loadGuidelines() {
-  if (_guidelines !== undefined) return _guidelines;   // pro Sitzung einmal laden
+// Im Repo gepflegte Zusatz-Dokumente (Negativ-Prompts, Standard-Tonalität).
+// Verwendet wird alles nach der ersten `---`-Linie (eigene Zeile). Pro Sitzung gecacht.
+const _docCache = {};
+async function loadRepoDoc(file) {
+  if (file in _docCache) return _docCache[file];
   try {
-    const res = await fetch('prompt-guidelines.md', { cache: 'no-store' });
-    if (!res.ok) { _guidelines = ''; return _guidelines; }
+    const res = await fetch(file, { cache: 'no-store' });
+    if (!res.ok) { _docCache[file] = ''; return ''; }
     const lines = (await res.text()).split('\n');
-    const sep = lines.findIndex((l) => l.trim() === '---');   // echte Trennlinie (eigene Zeile)
-    _guidelines = (sep !== -1 ? lines.slice(sep + 1) : lines).join('\n').trim();
-  } catch { _guidelines = ''; }
-  return _guidelines;
+    const sep = lines.findIndex((l) => l.trim() === '---');
+    _docCache[file] = (sep !== -1 ? lines.slice(sep + 1) : lines).join('\n').trim();
+  } catch { _docCache[file] = ''; }
+  return _docCache[file];
 }
 
 function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
@@ -57,7 +57,7 @@ function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
     : `Wähle eine sinnvolle Anzahl Folien (3–6).`;
   return [
     `Zielgruppe: ${zielgruppe || '—'}`,
-    `Tonalität: ${tonalitaet || '—'}`,
+    `Tonalität: ${tonalitaet || 'wie in der Standard-Tonalität unten beschrieben'}`,
     `Struktur/Aufbau: ${struktur || '—'}`,
     n,
     `Die erste Folie ist der Einstieg (role "opener"); eine abschließende Folie darf ein Call-to-Action sein (role "cta").`,
@@ -72,8 +72,12 @@ export async function generateDeck(opts) {
   const { apiKey, model = DEFAULT_MODEL } = opts;
   if (!apiKey) throw new Error('Kein API-Key angegeben.');
 
-  const guide = await loadGuidelines();
-  const system = systemPrompt() + (guide ? `\n\nZUSÄTZLICHE REDAKTIONELLE VORGABEN (verbindlich einhalten):\n${guide}` : '');
+  const guide = await loadRepoDoc('prompt-guidelines.md');
+  // Standard-Tonalität nur laden/anhängen, wenn keine eigene angegeben wurde.
+  const tone = (opts.tonalitaet && opts.tonalitaet.trim()) ? '' : await loadRepoDoc('tone-default.md');
+  let system = systemPrompt();
+  if (guide) system += `\n\nZUSÄTZLICHE REDAKTIONELLE VORGABEN (verbindlich einhalten):\n${guide}`;
+  if (tone)  system += `\n\nTONALITÄT (Standard – gilt, weil keine eigene angegeben wurde):\n${tone}`;
 
   let res;
   try {

@@ -87,6 +87,7 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
 .help-menu { min-width: 264px; padding: 12px; }
 .help-line { font-size: 12px; line-height: 1.5; color: var(--ink); padding: 3px 0; }
 .help-line + .help-line { border-top: 1px solid var(--line); }
+.help-meta { color: var(--muted); font-size: 11px; }
 
 .seg { display: flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: none; border-radius: 0; background: transparent; padding: 7px 12px; }
