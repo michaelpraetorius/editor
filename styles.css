@@ -135,7 +135,16 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
 }
 .transport .play { width: 40px; }
 .transport .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 96px; }
-#scrub { flex: 1; accent-color: var(--accent); }
+/* Scrub-Regler browserübergreifend gleich (Safari zeichnet native ranges anders) */
+#scrub { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 3px;
+  background: var(--line); outline: none; cursor: pointer; }
+#scrub::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: transparent; }
+#scrub::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+  margin-top: -5px; border-radius: 50%; background: var(--accent); border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+#scrub::-moz-range-track { height: 4px; border-radius: 3px; background: var(--line); }
+#scrub::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 
 /* ASSET-LEISTE */
 .tray {
