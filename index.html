@@ -62,8 +62,6 @@
           <div class="menu" id="deckMenu">
             <button data-deck="import">Deck importieren …</button>
             <button data-deck="paste">Deck einfügen (Text) …</button>
-            <button data-deck="link">Teilen-Link kopieren</button>
-            <button data-deck="copy">deck.json kopieren</button>
           </div>
           <input type="file" id="deckFile" accept=".json,application/json" hidden />
         </div>
@@ -162,8 +160,8 @@
           <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
         </label>
         <label class="gen-field gen-wide">
-          <span>Thema</span>
-          <input id="genThema" type="text" placeholder="z. B. Schlaf in den ersten Wochen" />
+          <span>Thema / Quelltext <span class="gen-opt">(auch eine ganze Pressemitteilung – wird zusammengefasst)</span></span>
+          <textarea id="genThema" rows="6" spellcheck="false" placeholder="Thema in einem Satz – oder einen kompletten Text (z. B. Pressemitteilung) hier einfügen …"></textarea>
         </label>
         <label class="gen-field">
           <span>Zielgruppe</span>
@@ -179,6 +177,7 @@
         </label>
       </div>
       <div class="modal-actions">
+        <button id="genReset" class="gen-reset">Felder leeren</button>
         <button id="genCancel">Abbrechen</button>
         <button id="genRun" class="primary">Generieren</button>
       </div>

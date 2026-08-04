@@ -355,8 +355,6 @@ export class UI {
       menu.classList.remove('open');
       if (b.dataset.deck === 'import') this._pickDeckFile();
       else if (b.dataset.deck === 'paste') this._openDeckModal();
-      else if (b.dataset.deck === 'link') this._copyShareLink();
-      else if (b.dataset.deck === 'copy') this._copyText(this.store.exportJSON(), 'deck.json kopiert');
     });
 
     // Datei-Dialog (Deck importieren …)
@@ -396,14 +394,23 @@ export class UI {
     keyEl.addEventListener('input', syncHelp);
     keyEl.addEventListener('change', () => { const v = keyEl.value.trim(); if (v) sessionStorage.setItem('cpe.aiKey', v); });
 
+    // Eingaben, die für „neu generieren" in der Sitzung gemerkt werden.
+    const FIELDS = { genThema: 'cpe.aiThema', genZiel: 'cpe.aiZiel', genTon: 'cpe.aiTon', genStruktur: 'cpe.aiStruktur', genCount: 'cpe.aiCount' };
+
     btn.onclick = () => {
       const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
       keyEl.value = savedKey;                             // in der Sitzung gemerkter Key
+      Object.entries(FIELDS).forEach(([id, k]) => { $(id).value = sessionStorage.getItem(k) || ''; });
       syncHelp();
       modal.classList.add('active');
       setTimeout(() => (savedKey ? $('genThema') : keyEl).focus(), 0);
     };
     $('genCancel').onclick = () => modal.classList.remove('active');
+    // „Neu starten": Eingaben leeren (Key bleibt), für ein frisches Thema.
+    $('genReset').onclick = () => {
+      Object.entries(FIELDS).forEach(([id, k]) => { $(id).value = ''; sessionStorage.removeItem(k); });
+      $('genThema').focus();
+    };
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
 
     const run = $('genRun');
@@ -415,6 +422,7 @@ export class UI {
 
       sessionStorage.setItem('cpe.aiKey', apiKey);       // nur Sitzung, weg beim Schließen
       sessionStorage.setItem('cpe.aiModel', sel.value);
+      Object.entries(FIELDS).forEach(([id, k]) => sessionStorage.setItem(k, $(id).value));  // Eingaben merken
 
       const anzahl = parseInt($('genCount').value, 10);
       run.disabled = true; const label = run.textContent; run.textContent = 'Generiere …';

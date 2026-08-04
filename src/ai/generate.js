@@ -56,12 +56,14 @@ function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
     ? `Erzeuge genau ${anzahl} Folien.`
     : `Wähle eine sinnvolle Anzahl Folien (3–6).`;
   return [
-    `Thema: ${thema || '—'}`,
     `Zielgruppe: ${zielgruppe || '—'}`,
     `Tonalität: ${tonalitaet || '—'}`,
     `Struktur/Aufbau: ${struktur || '—'}`,
     n,
     `Die erste Folie ist der Einstieg (role "opener"); eine abschließende Folie darf ein Call-to-Action sein (role "cta").`,
+    ``,
+    `Thema / Quelltext (kann ein Stichwort ODER ein langer Text wie eine Pressemitteilung sein – dann die Kernaussagen herausziehen und in Folien verdichten, nicht 1:1 übernehmen):`,
+    thema || '—',
   ].join('\n');
 }
 
