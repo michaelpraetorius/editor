@@ -390,11 +390,18 @@ export class UI {
     sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
     sel.value = sessionStorage.getItem('cpe.aiModel') || DEFAULT_MODEL;
 
+    // Erklärung nur zeigen, solange kein Key drin ist; Key sofort in der Sitzung merken.
+    const keyEl = $('genKey'), helpBox = $('genKeyHelpBox');
+    const syncHelp = () => { helpBox.hidden = keyEl.value.trim().length > 0; };
+    keyEl.addEventListener('input', syncHelp);
+    keyEl.addEventListener('change', () => { const v = keyEl.value.trim(); if (v) sessionStorage.setItem('cpe.aiKey', v); });
+
     btn.onclick = () => {
       const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
-      $('genKey').value = savedKey;                       // Key nur für diese Sitzung
+      keyEl.value = savedKey;                             // in der Sitzung gemerkter Key
+      syncHelp();
       modal.classList.add('active');
-      setTimeout(() => (savedKey ? $('genThema') : $('genKey')).focus(), 0);
+      setTimeout(() => (savedKey ? $('genThema') : keyEl).focus(), 0);
     };
     $('genCancel').onclick = () => modal.classList.remove('active');
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });

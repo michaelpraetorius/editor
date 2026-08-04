@@ -71,7 +71,6 @@ export async function generateDeck(opts) {
         system: systemPrompt(),
         messages: [
           { role: 'user', content: userPrompt(opts) },
-          { role: 'assistant', content: '{' },   // Prefill: erzwingt reines JSON
         ],
       }),
     });
@@ -88,12 +87,17 @@ export async function generateDeck(opts) {
 
   const data = await res.json();
   const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-  let raw = '{' + text;                       // Prefill zurückfügen
-  const end = raw.lastIndexOf('}');
-  if (end !== -1) raw = raw.slice(0, end + 1);   // evtl. Nachtext abschneiden
+  return parseDeck(text);
+}
 
+// Robust: Code-Fences entfernen, von der ersten { bis zur letzten } schneiden, parsen.
+function parseDeck(text) {
+  let t = (text || '').trim();
+  t = t.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const i = t.indexOf('{'), j = t.lastIndexOf('}');
+  if (i !== -1 && j !== -1) t = t.slice(i, j + 1);
   let deck;
-  try { deck = JSON.parse(raw); }
+  try { deck = JSON.parse(t); }
   catch { throw new Error('Antwort der KI war kein gültiges JSON.'); }
   if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) {
     throw new Error('Die KI hat kein Deck mit Folien geliefert.');
