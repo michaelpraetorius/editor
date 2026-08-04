@@ -67,6 +67,37 @@ function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
   ].join('\n');
 }
 
+// Werkzeug-Schema: erzwingt eine gültige, strukturierte Antwort (kein Text-Parsing nötig).
+const DECK_TOOL = {
+  name: 'deck',
+  description: 'Gibt das fertige Slide-Deck (nur Texte) strukturiert zurück.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      meta: {
+        type: 'object',
+        properties: { title: { type: 'string' }, structure: { type: 'string' } },
+        required: ['title'],
+      },
+      slides: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            role: { type: 'string' },
+            kicker: { type: 'string' },
+            headline: { type: 'string' },
+            subline: { type: 'string' },
+            body: { type: 'string' },
+          },
+          required: ['headline'],
+        },
+      },
+    },
+    required: ['slides'],
+  },
+};
+
 // Erwartet { apiKey, model, thema, zielgruppe, tonalitaet, struktur, anzahl }
 export async function generateDeck(opts) {
   const { apiKey, model = DEFAULT_MODEL } = opts;
@@ -93,6 +124,8 @@ export async function generateDeck(opts) {
         model,
         max_tokens: 3000,
         system,
+        tools: [DECK_TOOL],
+        tool_choice: { type: 'tool', name: 'deck' },   // erzwingt strukturierte Antwort
         messages: [
           { role: 'user', content: userPrompt(opts) },
         ],
@@ -110,8 +143,17 @@ export async function generateDeck(opts) {
   }
 
   const data = await res.json();
-  const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-  return parseDeck(text);
+  // Bevorzugt das Werkzeug-Ergebnis (bereits gültiges Objekt); Text-Parsing nur als Fallback.
+  const tool = (data?.content || []).find((b) => b.type === 'tool_use' && b.name === 'deck');
+  let deck = tool?.input;
+  if (!deck) {
+    const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    deck = parseDeck(text);
+  }
+  if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) {
+    throw new Error('Die KI hat kein Deck mit Folien geliefert.');
+  }
+  return deck;
 }
 
 // Robust: Code-Fences entfernen, von der ersten { bis zur letzten } schneiden, parsen.
