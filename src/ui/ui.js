@@ -6,6 +6,7 @@ import { FORMATS } from '../model/formats.js';
 import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets, registerCustomAsset } from '../model/assets.js';
 import { generateDeck, MODELS, DEFAULT_MODEL } from '../ai/generate.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
+import { EXAMPLE_DECK } from '../model/example-deck.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
 import { exportCurrentPNG, exportAllPNG } from '../export/png.js';
@@ -395,9 +396,14 @@ export class UI {
     });
   }
   _resetContent() {
-    this.store.deck.slides.forEach((s) => { s.kicker = ''; s.headline = ''; s.subline = ''; s.body = ''; s.colors = {}; s.pos = {}; });
+    const ex = EXAMPLE_DECK.slides;                     // Start-Blindtext wiederherstellen
+    this.store.deck.slides.forEach((s, i) => {
+      const e = ex[i % ex.length];
+      s.kicker = e.kicker; s.headline = e.headline; s.subline = e.subline; s.body = e.body;
+      s.colors = {}; s.pos = {};
+    });
     this.store.commit('reset-content');                 // Undo-fähig, rebuild via Event
-    this._toast('Inhalte zurückgesetzt (Cmd+Z macht es rückgängig)', 'success');
+    this._toast('Inhalte auf Start-Text zurückgesetzt (Cmd+Z macht es rückgängig)', 'success');
   }
   _resetGraphics() {
     this.store.deck.slides.forEach((s) => {
