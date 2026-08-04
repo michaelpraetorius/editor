@@ -36,6 +36,21 @@ ${limitLines}
 - Setze KEINE Hintergründe, Farben oder Assets – nur Text. Gib NUR das JSON-Objekt aus.`;
 }
 
+// Optionale, im Repo gepflegte Zusatz-Vorgaben (Negativ-Prompts / Ton).
+// Alles nach der ersten `---`-Linie in prompt-guidelines.md zählt.
+let _guidelines;
+async function loadGuidelines() {
+  if (_guidelines !== undefined) return _guidelines;   // pro Sitzung einmal laden
+  try {
+    const res = await fetch('prompt-guidelines.md', { cache: 'no-store' });
+    if (!res.ok) { _guidelines = ''; return _guidelines; }
+    const lines = (await res.text()).split('\n');
+    const sep = lines.findIndex((l) => l.trim() === '---');   // echte Trennlinie (eigene Zeile)
+    _guidelines = (sep !== -1 ? lines.slice(sep + 1) : lines).join('\n').trim();
+  } catch { _guidelines = ''; }
+  return _guidelines;
+}
+
 function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
   const n = anzahl
     ? `Erzeuge genau ${anzahl} Folien.`
@@ -55,6 +70,9 @@ export async function generateDeck(opts) {
   const { apiKey, model = DEFAULT_MODEL } = opts;
   if (!apiKey) throw new Error('Kein API-Key angegeben.');
 
+  const guide = await loadGuidelines();
+  const system = systemPrompt() + (guide ? `\n\nZUSÄTZLICHE REDAKTIONELLE VORGABEN (verbindlich einhalten):\n${guide}` : '');
+
   let res;
   try {
     res = await fetch(API_URL, {
@@ -68,7 +86,7 @@ export async function generateDeck(opts) {
       body: JSON.stringify({
         model,
         max_tokens: 2000,
-        system: systemPrompt(),
+        system,
         messages: [
           { role: 'user', content: userPrompt(opts) },
         ],
