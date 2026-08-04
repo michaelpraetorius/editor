@@ -1,19 +1,16 @@
-// KI-Generierung: erzeugt aus Thema/Zielgruppe/Tonalität/Struktur ein deck.json (nur Text).
-// Zwei Wege, je nach Schlüssel:
-//   - OpenRouter (sk-or…): OpenAI-kompatibler Endpunkt, Nutzer via Login (bring your own AI).
-//   - Anthropic direkt (sk-ant…): Messages API mit CORS-Direktzugriff.
-// Alles im Browser; nichts wird serverseitig gespeichert.
+// KI-Generierung: ruft Claude DIREKT aus dem Browser auf (bring your own key)
+// und erzeugt daraus ein deck.json (nur Text). Nichts wird serverseitig gespeichert;
+// der API-Key bleibt im Browser. Anthropic erlaubt Direktzugriff per CORS-Header.
 
 import { LIMITS } from '../model/limits.js';
 
-const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const API_URL = 'https://api.anthropic.com/v1/messages';
 
-// Modelle für den direkten Anthropic-Key (Fallback-Weg im Key-Feld).
+// Modelle für den Test mit Claude (Auswahl im Modal).
 export const MODELS = [
-  { id: 'claude-sonnet-5',           label: 'Claude Sonnet 5 (ausgewogen)' },
-  { id: 'claude-opus-5',             label: 'Claude Opus 5 (stärkste)' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (schnell)' },
+  { id: 'claude-sonnet-5',            label: 'Claude Sonnet 5 (ausgewogen)' },
+  { id: 'claude-opus-5',              label: 'Claude Opus 5 (stärkste)' },
+  { id: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku 4.5 (schnell)' },
 ];
 export const DEFAULT_MODEL = 'claude-sonnet-5';
 
@@ -40,7 +37,9 @@ ${limitLines}
 }
 
 function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
-  const n = anzahl ? `Erzeuge genau ${anzahl} Folien.` : `Wähle eine sinnvolle Anzahl Folien (3–6).`;
+  const n = anzahl
+    ? `Erzeuge genau ${anzahl} Folien.`
+    : `Wähle eine sinnvolle Anzahl Folien (3–6).`;
   return [
     `Thema: ${thema || '—'}`,
     `Zielgruppe: ${zielgruppe || '—'}`,
@@ -51,76 +50,53 @@ function userPrompt({ thema, zielgruppe, tonalitaet, struktur, anzahl }) {
   ].join('\n');
 }
 
-// Robust: Code-Fences entfernen, von der ersten { bis zur letzten } schneiden, parsen.
-function parseDeck(text) {
-  let t = (text || '').trim();
-  t = t.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-  const i = t.indexOf('{'), j = t.lastIndexOf('}');
-  if (i !== -1 && j !== -1) t = t.slice(i, j + 1);
+// Erwartet { apiKey, model, thema, zielgruppe, tonalitaet, struktur, anzahl }
+export async function generateDeck(opts) {
+  const { apiKey, model = DEFAULT_MODEL } = opts;
+  if (!apiKey) throw new Error('Kein API-Key angegeben.');
+
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 2000,
+        system: systemPrompt(),
+        messages: [
+          { role: 'user', content: userPrompt(opts) },
+          { role: 'assistant', content: '{' },   // Prefill: erzwingt reines JSON
+        ],
+      }),
+    });
+  } catch (e) {
+    throw new Error('Netzwerkfehler beim Aufruf der Claude-API.');
+  }
+
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const e = await res.json(); if (e?.error?.message) msg = e.error.message; } catch {}
+    if (res.status === 401) msg = 'API-Key ungültig (401).';
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  let raw = '{' + text;                       // Prefill zurückfügen
+  const end = raw.lastIndexOf('}');
+  if (end !== -1) raw = raw.slice(0, end + 1);   // evtl. Nachtext abschneiden
+
   let deck;
-  try { deck = JSON.parse(t); }
+  try { deck = JSON.parse(raw); }
   catch { throw new Error('Antwort der KI war kein gültiges JSON.'); }
   if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) {
     throw new Error('Die KI hat kein Deck mit Folien geliefert.');
   }
   return deck;
-}
-
-// opts: { apiKey, model, thema, zielgruppe, tonalitaet, struktur, anzahl }
-export async function generateDeck(opts) {
-  const { apiKey } = opts;
-  if (!apiKey) throw new Error('Nicht verbunden – bitte anmelden oder Key eingeben.');
-  const viaOpenRouter = apiKey.startsWith('sk-or');
-  const sys = systemPrompt(), usr = userPrompt(opts);
-
-  let url, headers, body;
-  if (viaOpenRouter) {
-    url = OPENROUTER_URL;
-    headers = {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': location.origin,
-      'X-Title': 'Content Pipeline Editor',
-    };
-    // OpenRouter braucht einen Provider-Präfix (anthropic/…); manuell gewählte
-    // Anthropic-Slugs (ohne „/") entsprechend ergänzen.
-    let m = opts.model || 'anthropic/claude-sonnet-5';
-    if (!m.includes('/')) m = 'anthropic/' + m;
-    body = {
-      model: m,
-      max_tokens: 2000,
-      messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
-    };
-  } else {
-    url = ANTHROPIC_URL;
-    headers = {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    };
-    body = {
-      model: opts.model || DEFAULT_MODEL,
-      max_tokens: 2000,
-      system: sys,
-      messages: [{ role: 'user', content: usr }],
-    };
-  }
-
-  let res;
-  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }); }
-  catch { throw new Error('Netzwerkfehler beim KI-Aufruf.'); }
-
-  if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try { const e = await res.json(); msg = e?.error?.message || (typeof e?.error === 'string' ? e.error : msg); } catch {}
-    if (res.status === 401) msg = 'Zugang ungültig oder abgelaufen (401).';
-    throw new Error(msg);
-  }
-
-  const data = await res.json();
-  const text = viaOpenRouter
-    ? (data?.choices?.[0]?.message?.content || '')
-    : (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-  return parseDeck(text);
 }
