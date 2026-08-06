@@ -519,8 +519,15 @@ export class UI {
     m.classList.add('active');
     setTimeout(() => document.getElementById('deckPaste').focus(), 0);
   }
+  // Toleriert Code-Fences / Fließtext um das JSON (externe KI-Ausgaben).
+  _extractJSON(text) {
+    let t = (text || '').trim();
+    t = t.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const i = t.indexOf('{'), j = t.lastIndexOf('}');
+    return (i !== -1 && j !== -1) ? t.slice(i, j + 1) : t;
+  }
   async _loadDeckJSON(text) {
-    const obj = JSON.parse(text);                 // wirft bei ungültigem JSON
+    const obj = JSON.parse(this._extractJSON(text));   // wirft bei ungültigem JSON
     this.store.loadDeck(obj);
     this._assignFolderBackgrounds();              // Hintergrund/Overlay automatisch belegen
     await preloadDeckAssets(this.store.deck);
