@@ -282,14 +282,21 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
 .gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .gen-field { display: flex; flex-direction: column; gap: 4px; }
 .gen-field.gen-wide { grid-column: 1 / -1; }
-.gen-field > span { font-size: 11px; font-weight: 600; color: var(--muted); }
-.gen-field .gen-opt { font-weight: 400; }
+.gen-field > span { font-size: 12px; font-weight: 600; color: #111318; }   /* Beschriftung dunkel */
+.gen-field .gen-opt { font-weight: 400; color: var(--muted); }
 .gen-field input, .gen-field select, .gen-field textarea {
-  width: 100%; padding: 8px 10px; font-size: 13px; font-family: inherit;
-  color: var(--ink); background: var(--panel-2); border: 1px solid var(--line);
+  width: 100%; font-size: 13px; font-family: inherit;
+  color: #111318; background: #fff; border: 1px solid #d4d4d8;
   border-radius: 8px; outline: none;
 }
-.gen-field textarea { height: auto; resize: vertical; line-height: 1.4; }
+.gen-field input, .gen-field select { height: 40px; padding: 0 12px; }   /* Felder + Dropdowns gleiche Höhe */
+.gen-field select {
+  -webkit-appearance: none; appearance: none; padding-right: 32px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23111318' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.gen-field textarea { padding: 10px 12px; resize: vertical; line-height: 1.45; }
+.gen-field input::placeholder, .gen-field textarea::placeholder { color: #9aa0a6; }   /* neutrales Grau */
 .gen-field input:focus, .gen-field select:focus, .gen-field textarea:focus { border-color: var(--accent); }
 @media (max-width: 560px) { .gen-grid { grid-template-columns: 1fr; } }
 /* KI-Modal: Key-Hilfe */

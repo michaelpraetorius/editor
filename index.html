@@ -146,7 +146,6 @@
   <div class="modal" id="genModal">
     <div class="modal-box">
       <div class="modal-title">Folien mit KI erzeugen</div>
-      <p class="modal-hint">Claude schreibt die Texte und füllt die Vorschau.</p>
       <div class="gen-grid">
         <div class="gen-field gen-wide">
           <span>Anthropic API-Key</span>
@@ -170,8 +169,8 @@
           <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
         </label>
         <label class="gen-field gen-wide">
-          <span>Thema / Quelltext <span class="gen-opt">(auch eine ganze Pressemitteilung – wird zusammengefasst)</span></span>
-          <textarea id="genThema" rows="6" spellcheck="false" placeholder="Thema in einem Satz – oder einen kompletten Text (z. B. Pressemitteilung) hier einfügen …"></textarea>
+          <span>Thema / Quelltext</span>
+          <textarea id="genThema" rows="6" spellcheck="false" placeholder="Thema in einem Satz …"></textarea>
           <div class="gen-count" id="themaCount"></div>
         </label>
         <label class="gen-field">
