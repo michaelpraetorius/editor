@@ -56,11 +56,14 @@ export class UI {
 
   // ---- Toolbar ----------------------------------------------------------
   _bindToolbar() {
-    const fmtWrap = document.getElementById('formatBtns');
-    fmtWrap.innerHTML = Object.values(FORMATS).map((f) => `<button data-format="${f.id}">${f.label}</button>`).join('');
-    fmtWrap.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-format]'); if (b) this.store.setFormat(b.dataset.format);
-    });
+    const fmtSel = document.getElementById('formatSelect');
+    const groups = {};
+    Object.values(FORMATS).forEach((f) => { (groups[f.group] ||= []).push(f); });
+    fmtSel.innerHTML = Object.entries(groups).map(([g, list]) =>
+      `<optgroup label="${g}">` + list.map((f) => `<option value="${f.id}">${f.label}</option>`).join('') + '</optgroup>'
+    ).join('');
+    fmtSel.value = this.store.format;
+    fmtSel.onchange = () => this.store.setFormat(fmtSel.value);
     const safeBtn = document.getElementById('safeBtn');
     safeBtn.classList.toggle('active', this.renderer.showSafe);   // Startzustand spiegeln
     safeBtn.onclick = (e) => {
@@ -102,8 +105,8 @@ export class UI {
     });
   }
   _syncToolbar() {
-    document.querySelectorAll('#formatBtns button').forEach((b) =>
-      b.classList.toggle('active', b.dataset.format === this.store.format));
+    const fs = document.getElementById('formatSelect');
+    if (fs) fs.value = this.store.format;
   }
 
   // ---- Timeline ---------------------------------------------------------
