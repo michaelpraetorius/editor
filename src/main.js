@@ -75,7 +75,28 @@ async function loadInitialDeck(store) {
   } catch (e) { console.warn('[Deck] konnte nicht geladen werden:', e); }
 }
 
+// Build-Kennung. MUSS bei jedem Deploy gemeinsam mit version.txt erhöht werden.
+const BUILD = '2026-09-16-1';
+
+// Selbstheilung gegen gemischten Browser-/Pages-Cache: liegt eine neuere Version
+// vor (version.txt, no-store), lädt die Seite genau einmal frisch neu.
+async function checkVersion() {
+  try {
+    const res = await fetch('version.txt?ts=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return false;
+    const latest = (await res.text()).trim();
+    if (!latest || latest === BUILD) return false;
+    const k = 'cpe.reloadedFor';
+    if (sessionStorage.getItem(k) === latest) return false;   // schon versucht → keine Endlosschleife
+    sessionStorage.setItem(k, latest);
+    location.reload();
+    return true;
+  } catch { return false; }
+}
+
 async function boot() {
+  if (await checkVersion()) return;              // neuer Build → Reload, hier abbrechen
+
   // Schriften müssen für Canvas-Textsatz bereitstehen (Konzept 8.2).
   if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch {} }
   await preloadAll();
