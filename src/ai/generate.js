@@ -1,18 +1,40 @@
-// KI-Generierung: ruft Claude DIREKT aus dem Browser auf (bring your own key)
+// KI-Generierung: ruft die KI DIREKT aus dem Browser auf (bring your own key)
 // und erzeugt daraus ein deck.json (nur Text). Nichts wird serverseitig gespeichert;
-// der API-Key bleibt im Browser. Anthropic erlaubt Direktzugriff per CORS-Header.
+// der API-Key bleibt im Browser.
+// Direkt aus dem Browser möglich: Anthropic (CORS-Header) und Mistral (CORS erlaubt).
+// OpenAI geht NICHT direkt (CORS blockiert) → nur über einen Proxy, siehe docs/KI-ANBINDUNG.md.
 
 import { LIMITS } from '../model/limits.js';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 
-// Modelle für den Test mit Claude (Auswahl im Modal).
-export const MODELS = [
-  { id: 'claude-sonnet-5',            label: 'Claude Sonnet 5 (ausgewogen)' },
-  { id: 'claude-opus-5',              label: 'Claude Opus 5 (stärkste)' },
-  { id: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku 4.5 (schnell)' },
-];
-export const DEFAULT_MODEL = 'claude-sonnet-5';
+// Anbieter + ihre Modelle (Auswahl im Dialog).
+export const PROVIDERS = {
+  anthropic: {
+    label: 'Anthropic (Claude)',
+    defaultModel: 'claude-sonnet-5',
+    models: [
+      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 (ausgewogen)' },
+      { id: 'claude-opus-5', label: 'Claude Opus 5 (stärkste)' },
+      { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (schnell)' },
+    ],
+  },
+  mistral: {
+    label: 'Mistral',
+    defaultModel: 'mistral-large-latest',
+    models: [
+      { id: 'mistral-large-latest', label: 'Mistral Large (stärkste)' },
+      { id: 'mistral-medium-latest', label: 'Mistral Medium (ausgewogen)' },
+      { id: 'mistral-small-latest', label: 'Mistral Small (schnell)' },
+    ],
+  },
+};
+export const DEFAULT_PROVIDER = 'anthropic';
+
+// Rückwärtskompatibel (frühere Importe).
+export const MODELS = PROVIDERS.anthropic.models;
+export const DEFAULT_MODEL = PROVIDERS.anthropic.defaultModel;
 
 const limitLines = Object.entries(LIMITS)
   .map(([f, l]) => `  - ${f}: ${l.min}–${l.max} Zeichen, max ${l.lines} Zeile(n)`).join('\n');
@@ -98,10 +120,12 @@ const DECK_TOOL = {
   },
 };
 
-// Erwartet { apiKey, model, thema, zielgruppe, tonalitaet, struktur, anzahl }
+// Erwartet { provider, apiKey, model, thema, zielgruppe, tonalitaet, struktur, anzahl }
 export async function generateDeck(opts) {
-  const { apiKey, model = DEFAULT_MODEL } = opts;
+  const provider = opts.provider || DEFAULT_PROVIDER;
+  const { apiKey } = opts;
   if (!apiKey) throw new Error('Kein API-Key angegeben.');
+  const model = opts.model || PROVIDERS[provider]?.defaultModel;
 
   const guide = await loadRepoDoc('prompt-guidelines.md');
   // Standard-Tonalität nur laden/anhängen, wenn keine eigene angegeben wurde.
@@ -109,10 +133,30 @@ export async function generateDeck(opts) {
   let system = systemPrompt();
   if (guide) system += `\n\nZUSÄTZLICHE REDAKTIONELLE VORGABEN (verbindlich einhalten):\n${guide}`;
   if (tone)  system += `\n\nTONALITÄT (Standard – gilt, weil keine eigene angegeben wurde):\n${tone}`;
+  const usr = userPrompt(opts);
 
+  const deck = provider === 'mistral'
+    ? await callMistral(apiKey, model, system, usr)
+    : await callAnthropic(apiKey, model, system, usr);
+
+  if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) {
+    throw new Error('Die KI hat kein Deck mit Folien geliefert.');
+  }
+  return deck;
+}
+
+async function httpError(res, who) {
+  let msg = `${res.status} ${res.statusText}`;
+  try { const e = await res.json(); msg = e?.error?.message || e?.message || (typeof e?.error === 'string' ? e.error : msg); } catch {}
+  if (res.status === 401) msg = 'API-Key ungültig (401).';
+  return new Error(msg);
+}
+
+// Anthropic: erzwingt via Tool-Use ein gültiges, strukturiertes Ergebnis.
+async function callAnthropic(apiKey, model, system, usr) {
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -121,39 +165,41 @@ export async function generateDeck(opts) {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model,
-        max_tokens: 3000,
-        system,
+        model, max_tokens: 3000, system,
         tools: [DECK_TOOL],
-        tool_choice: { type: 'tool', name: 'deck' },   // erzwingt strukturierte Antwort
-        messages: [
-          { role: 'user', content: userPrompt(opts) },
-        ],
+        tool_choice: { type: 'tool', name: 'deck' },
+        messages: [{ role: 'user', content: usr }],
       }),
     });
-  } catch (e) {
-    throw new Error('Netzwerkfehler beim Aufruf der Claude-API.');
-  }
-
-  if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try { const e = await res.json(); if (e?.error?.message) msg = e.error.message; } catch {}
-    if (res.status === 401) msg = 'API-Key ungültig (401).';
-    throw new Error(msg);
-  }
+  } catch { throw new Error('Netzwerkfehler beim Aufruf der Claude-API.'); }
+  if (!res.ok) throw await httpError(res);
 
   const data = await res.json();
-  // Bevorzugt das Werkzeug-Ergebnis (bereits gültiges Objekt); Text-Parsing nur als Fallback.
   const tool = (data?.content || []).find((b) => b.type === 'tool_use' && b.name === 'deck');
-  let deck = tool?.input;
-  if (!deck) {
-    const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-    deck = parseDeck(text);
-  }
-  if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) {
-    throw new Error('Die KI hat kein Deck mit Folien geliefert.');
-  }
-  return deck;
+  if (tool?.input) return tool.input;
+  const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  return parseDeck(text);
+}
+
+// Mistral: OpenAI-kompatibel, JSON-Modus erzwingt gültiges JSON (Schema prüfen wir selbst).
+async function callMistral(apiKey, model, system, usr) {
+  let res;
+  try {
+    res = await fetch(MISTRAL_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model, max_tokens: 3000,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: system }, { role: 'user', content: usr }],
+      }),
+    });
+  } catch { throw new Error('Netzwerkfehler beim Aufruf der Mistral-API.'); }
+  if (!res.ok) throw await httpError(res);
+
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || '';
+  return parseDeck(text);
 }
 
 // Robust: Code-Fences entfernen, von der ersten { bis zur letzten } schneiden, parsen.

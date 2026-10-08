@@ -4,7 +4,7 @@
 
 import { FORMATS } from '../model/formats.js';
 import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAssets, registerCustomAsset } from '../model/assets.js';
-import { generateDeck, MODELS, DEFAULT_MODEL } from '../ai/generate.js';
+import { generateDeck, PROVIDERS, DEFAULT_PROVIDER } from '../ai/generate.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { EXAMPLE_DECK } from '../model/example-deck.js';
 import { removeBackground } from '../render/bg-remove.js';
@@ -419,8 +419,9 @@ export class UI {
     this._toast('Grafiken zurückgesetzt (Cmd+Z macht es rückgängig)', 'success');
   }
   _resetKey() {
-    sessionStorage.removeItem('cpe.aiKey');
-    sessionStorage.removeItem('cpe.aiModel');
+    // alle anbieter-spezifischen Keys/Modelle entfernen (cpe.aiKey.*, cpe.aiModel.*)
+    Object.keys(sessionStorage).filter((k) => /^cpe\.ai(Key|Model|Provider)/.test(k))
+      .forEach((k) => sessionStorage.removeItem(k));
     this._toast('API-Key entfernt', 'success');
   }
   _resetAll() {
@@ -436,16 +437,51 @@ export class UI {
     if (!btn || !modal) return;
     const $ = (id) => document.getElementById(id);
 
-    // Modell-Auswahl füllen
-    const sel = $('genModel');
-    sel.innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
-    sel.value = sessionStorage.getItem('cpe.aiModel') || DEFAULT_MODEL;
-
-    // Erklärung nur zeigen, solange kein Key drin ist; Key sofort in der Sitzung merken.
+    const provSel = $('genProvider'), sel = $('genModel');
     const keyEl = $('genKey'), helpBox = $('genKeyHelpBox');
+
+    // Anbieter-spezifische Hilfe (wo bekommt man den Key?).
+    const PROVIDER_UI = {
+      anthropic: { placeholder: 'sk-ant-…', console: 'https://console.anthropic.com/settings/keys', consoleLabel: 'Anthropic-Konsole öffnen',
+        steps: ['Bei <b>console.anthropic.com</b> anmelden.',
+                'Unter <b>Billing</b> etwas Guthaben aufladen (ab wenigen $ – eine Generierung kostet nur Cent-Beträge).',
+                '<b>API keys → Create Key</b>, den Schlüssel kopieren und hier einfügen.'] },
+      mistral: { placeholder: 'Mistral API-Key …', console: 'https://console.mistral.ai/api-keys', consoleLabel: 'Mistral-Konsole öffnen',
+        steps: ['Bei <b>console.mistral.ai</b> anmelden.',
+                'Unter <b>Billing/Plans</b> einen Zahlungsweg hinterlegen (Pay-as-you-go).',
+                '<b>API Keys → Create new key</b>, den Schlüssel kopieren und hier einfügen.'] },
+    };
+
+    provSel.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => `<option value="${id}">${p.label}</option>`).join('');
+    const curProvider = () => provSel.value;
+    const keyKey = () => 'cpe.aiKey.' + curProvider();       // Key pro Anbieter gemerkt
+    const modelKey = () => 'cpe.aiModel.' + curProvider();
+
     const syncHelp = () => { helpBox.hidden = keyEl.value.trim().length > 0; };
+    const renderHelp = () => {
+      const ui = PROVIDER_UI[curProvider()] || PROVIDER_UI.anthropic;
+      helpBox.innerHTML = '<ol>' + ui.steps.map((s) => `<li>${s}</li>`).join('') + '</ol>'
+        + `<a class="gen-console-btn" href="${ui.console}" target="_blank" rel="noopener">${ui.consoleLabel} ↗</a>`
+        + '<p class="gen-help-note">Der Key bleibt in deinem Browser (nur diese Sitzung) und geht an niemanden außer dem Anbieter.</p>';
+      keyEl.placeholder = ui.placeholder;
+    };
+    const fillModels = () => {
+      const p = PROVIDERS[curProvider()];
+      sel.innerHTML = p.models.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
+      const saved = sessionStorage.getItem(modelKey());
+      sel.value = (saved && p.models.some((m) => m.id === saved)) ? saved : p.defaultModel;
+    };
+    // Anbieterwechsel: Modelle, Hilfe und gemerkten Key des Anbieters laden.
+    const applyProvider = () => {
+      renderHelp(); fillModels();
+      keyEl.value = sessionStorage.getItem(keyKey()) || '';
+      syncHelp();
+      sessionStorage.setItem('cpe.aiProvider', curProvider());
+    };
+    provSel.onchange = applyProvider;
+
     keyEl.addEventListener('input', syncHelp);
-    keyEl.addEventListener('change', () => { const v = keyEl.value.trim(); if (v) sessionStorage.setItem('cpe.aiKey', v); });
+    keyEl.addEventListener('change', () => { const v = keyEl.value.trim(); if (v) sessionStorage.setItem(keyKey(), v); });
 
     // Eingaben, die für „neu generieren" in der Sitzung gemerkt werden.
     const FIELDS = { genThema: 'cpe.aiThema', genZiel: 'cpe.aiZiel', genTon: 'cpe.aiTon', genStruktur: 'cpe.aiStruktur', genCount: 'cpe.aiCount' };
@@ -462,12 +498,12 @@ export class UI {
     themaEl.addEventListener('input', syncCount);
 
     btn.onclick = () => {
-      const savedKey = sessionStorage.getItem('cpe.aiKey') || '';
-      keyEl.value = savedKey;                             // in der Sitzung gemerkter Key
+      provSel.value = sessionStorage.getItem('cpe.aiProvider') || DEFAULT_PROVIDER;
+      applyProvider();                                    // Modelle + Hilfe + gemerkter Key des Anbieters
       Object.entries(FIELDS).forEach(([id, k]) => { $(id).value = sessionStorage.getItem(k) || ''; });
-      syncHelp(); syncCount(); errEl.hidden = true;
+      syncCount(); errEl.hidden = true;
       modal.classList.add('active');
-      setTimeout(() => (savedKey ? $('genThema') : keyEl).focus(), 0);
+      setTimeout(() => (keyEl.value ? $('genThema') : keyEl).focus(), 0);
     };
     $('genCancel').onclick = () => modal.classList.remove('active');
     // „Neu starten": Eingaben leeren (Key bleibt), für ein frisches Thema.
@@ -489,15 +525,15 @@ export class UI {
         errEl.hidden = false; themaEl.focus(); return;
       }
 
-      sessionStorage.setItem('cpe.aiKey', apiKey);       // nur Sitzung, weg beim Schließen
-      sessionStorage.setItem('cpe.aiModel', sel.value);
+      sessionStorage.setItem(keyKey(), apiKey);          // nur Sitzung, pro Anbieter
+      sessionStorage.setItem(modelKey(), sel.value);
       Object.entries(FIELDS).forEach(([id, k]) => sessionStorage.setItem(k, $(id).value));  // Eingaben merken
 
       const anzahl = parseInt($('genCount').value, 10);
       run.disabled = true; const label = run.textContent; run.textContent = 'Generiere …';
       try {
         const deck = await generateDeck({
-          apiKey, model: sel.value, thema,
+          provider: curProvider(), apiKey, model: sel.value, thema,
           zielgruppe: $('genZiel').value.trim(),
           tonalitaet: $('genTon').value.trim(),
           struktur: $('genStruktur').value.trim(),

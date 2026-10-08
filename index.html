@@ -147,23 +147,19 @@
     <div class="modal-box">
       <div class="modal-title">Folien mit KI erzeugen</div>
       <div class="gen-grid">
-        <div class="gen-field gen-wide">
-          <span>Anthropic API-Key</span>
-          <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
-          <div class="gen-help" id="genKeyHelpBox">
-            <ol>
-              <li>Bei <b>console.anthropic.com</b> anmelden.</li>
-              <li>Unter <b>Billing</b> etwas Guthaben aufladen (geht ab wenigen $ – eine Deck-Generierung kostet nur Cent-Beträge).</li>
-              <li><b>API keys → Create Key</b>, den Schlüssel kopieren und hier einfügen.</li>
-            </ol>
-            <a class="gen-console-btn" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic-Konsole öffnen ↗</a>
-            <p class="gen-help-note">Der Key bleibt in deinem Browser (nur diese Sitzung) und geht an niemanden außer Anthropic.</p>
-          </div>
-        </div>
+        <label class="gen-field">
+          <span>Anbieter</span>
+          <select id="genProvider"></select>
+        </label>
         <label class="gen-field">
           <span>Modell</span>
           <select id="genModel"></select>
         </label>
+        <div class="gen-field gen-wide">
+          <span>API-Key</span>
+          <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
+          <div class="gen-help" id="genKeyHelpBox"></div>
+        </div>
         <label class="gen-field">
           <span>Anzahl Folien</span>
           <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
