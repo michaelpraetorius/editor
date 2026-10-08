@@ -1,65 +1,69 @@
-# Content Pipeline Editor v2
+# Folieneditor
 
-Canvas-basierter Editor (Konva) für Listicles / Karussells / Reels. Rein im Browser,
-kein Build-Step. `deck.json` ist die einzige Wahrheit — Renderer und alle Exportwege
-lesen sie, der Editor verändert sie.
+Schlanker Editor für individuell beschriftete Folien, z. B. Treppenfolien.
+
+- Breite und Höhe in cm (höchstens 200 × 15 cm, mindestens 5 × 2 cm)
+- Text (mehrzeilig), passt sich automatisch an die Fläche an
+- Bild oder Logo hochladen: links oder rechts neben dem Text oder als Hintergrund
+- Schriftart per Dropdown, Grundschrift als Standard
+- Hintergrund- und Textfarbe
+- Export als **PDF**, **SVG** oder **PNG**, jeweils mit 2 mm Beschnitt auf allen Seiten
+
+Ausführliche Beschreibung aller Funktionen: [docs/DOKUMENTATION.md](docs/DOKUMENTATION.md)
+
+Testshop mit WordPress und WooCommerce im Browser: [testshop/README.md](testshop/README.md)
+
+Planung der Shop-Anbindung (WooCommerce): [docs/SHOP-ANBINDUNG.md](docs/SHOP-ANBINDUNG.md)
+
+**WordPress-Plugin** für den Shop (Editor auf der Produktseite, Bestellung mit Druck-PDF): [wordpress-plugin/README.md](wordpress-plugin/README.md)
 
 ## Starten
 
-```bash
-python3 -m http.server 4599
-```
+Lokal:
 
-Dann http://localhost:4599/index.html öffnen (Chrome/Edge für MP4-Export).
-Der Zustand wird per Autosave in `localStorage` gehalten.
+    python3 serve.py
 
-## Architektur
+Dann `http://localhost:4599/index.html` öffnen. Ein Doppelklick auf `index.html` funktioniert nicht, weil der Browser JavaScript-Module dann blockiert.
 
-```
-index.html            App-Shell (Toolbar, Thumbs, Stage, Inspector) + Vendor-Libs
-styles.css            UI-Styling
-vendor/               Konva, jsPDF, mp4-muxer (lokal vendored)
-src/
-  main.js             Bootstrap: Fonts/Assets laden, Store/Renderer/UI verdrahten
-  core/
-    store.js          deck.json-State, Undo/Redo, Autosave, Selektion, Events
-    emitter.js        Mini-Event-Emitter
-  model/
-    schema.js         Normalisierung + Defaults (SCHEMA_VERSION)
-    example-deck.js   Handgeschriebenes 10-Slide-Beispiel (Listicle)
-    formats.js        9:16 / 4:5 / 1:1 + Sicherheitszonen (0..1)
-    themes.js         Palette + Schriftpaar + Motion
-    layouts.js        text-bottom / -center / -top / split
-    limits.js         Harte Zeichenlimits (Warnung, kein Abschneiden)
-    assets.js         Asset-Register (eingebaute SVGs) + Bild-Cache
-  render/
-    paint.js          REINES Zeichnen des Ebenenstapels z0..z50 bei Zeit t
-    renderer.js       Live-Editor: Fit, Drag&Drop, Selektion, Safe-Zones, Timeline
-    motion.js         Bewegungs-Presets (calm/punchy), seek(t)-fähig
-    text-fit.js       Typo-Defaults + Auto-Fit
-  ui/
-    ui.js             Toolbar, Thumbnails, Inspector, Timeline, Export-Fortschritt
-    inline-edit.js    DOM-Overlay-Texteditor mit Zeichenzähler/Limit
-  export/
-    offscreen.js      Full-Res-Renderer (nutzt paint.js) für PNG/PDF/MP4
-    png.js  pdf.js  mp4.js
-```
+Online über GitHub Pages: **Settings → Pages → Deploy from a branch → main / (root)**.
 
-**Kernprinzip:** `paint.js` wird identisch vom Live-Editor UND vom Export benutzt →
-WYSIWYG. Positionen sind 0..1 (überleben Formatwechsel), Assets nur per ID referenziert.
+**Bei jeder Veröffentlichung** die Versionsnummer `?v=…` erhöhen, und zwar überall gleich: in `index.html` (CSS und `main.js`) und bei allen Imports in `src/*.js` (z. B. `grep -rn "?v=" index.html src`). GitHub Pages hält Dateien sonst etwa 10 Minuten im Browser-Cache, und alte und neue Dateien können sich mischen.
 
-## Status (Konzept-Phasen)
+## Exporte
 
-- [x] Phase 1 — Datenmodell, Asset-Register, Themes, Layouts, Beispiel-Deck
-- [x] Phase 3 — Canvas-Editor: Format, Text mit Limits, Ebenen, Decor-Drag+Snapping,
-      Themes, Scrim, Safe-Zones, PNG + PDF, Undo/Redo, Autosave, JSON I/O
-- [x] Phase 4 — Timeline, Motion-Presets, MP4-Export (WebCodecs + mp4-muxer)
-- [ ] Phase 2 — Generierung A–D → deck.json (noch offen)
+| Format | Art | Inhalt |
+|---|---|---|
+| PDF | Vektor | Seitengröße = Endformat + 2 mm Beschnitt je Seite, mit TrimBox (Endformat) und BleedBox für die Druckerei; Fotos als JPEG, Logos mit Transparenz |
+| SVG | Vektor | Maße in mm, Text als Pfade, Bild eingebettet |
+| PNG | Raster | 150 dpi, Auflösung in der Datei eingetragen |
 
-## Bekannte nächste Schritte
+In PDF und SVG ist der Text in Pfade umgewandelt. Die Dateien sehen deshalb überall gleich aus, auch wenn die Schrift auf dem Rechner der Druckerei fehlt. Alle drei Formate werden aus denselben Schriftdaten erzeugt und sind deckungsgleich.
 
-- Generierungs-Stufe (Brief → Outline → Copy → deck.json)
-- Textblock frei verschiebbar (textOffset ist im Modell, UI-Drag fehlt)
-- Eigene Assets hochladen (Register ist bislang eingebaut)
-- Audio-Track im MP4 (Muxer-Kette müsste Audio mitnehmen)
-- Fonts lokal vendoren (aktuell Google Fonts; für Offline/Export-Garantie)
+Farben werden als RGB ausgegeben. Im Druck (CMYK) können kräftige Töne wie Türkis, Grün oder Pink etwas anders aussehen.
+
+## Höchstmaße ändern
+
+Standard sind 200 × 15 cm. Per URL lässt sich das anpassen, z. B. `index.html?maxw=150&maxh=20`, oder dauerhaft in `src/main.js` (Konstante `LIMITS`).
+
+## Grundschrift
+
+Die Grundschrift ist aus Lizenzgründen nicht enthalten. Eine lizenzierte Datei als
+`fonts/grundschrift.otf`, `.ttf` oder `.woff` ablegen (nicht `.woff2`). Sie erscheint
+dann automatisch als Standard im Dropdown. Ohne Datei ist Andika der Standard.
+
+Die mitgelieferten Schriften stehen unter der SIL Open Font License (siehe `fonts/LIZENZEN.md`).
+
+## Dateien
+
+- `index.html` – eigene Seite, startet den Editor
+- `styles.css` – Gestaltung (alles unter `.fe` gekapselt, damit es auch in fremden Seiten läuft)
+- `src/ui.js` – Markup des Editors
+- `src/main.js` – Bedienung, Bild-Upload, Speicherstand im Browser (`mount()`)
+- `src/shop.js` – Start im Shop: Preis, Warenkorb (WordPress-Plugin)
+- `src/layout.js` – Satz in Millimetern (Text und Bild), Beschnitt (2 mm) und Sicherheitsabstand (3 mm), Vorschau
+- `src/export.js` – PNG-, SVG- und PDF-Export
+- `src/fonts.js` – Schriftliste
+- `fonts/` – Schriftdateien
+- `wordpress-plugin/` – WordPress-/WooCommerce-Plugin
+- `testshop/` – Testshop im Browser
+- `vendor/opentype.min.mjs` – opentype.js 2.0 (MIT-Lizenz) zum Lesen der Schriften
