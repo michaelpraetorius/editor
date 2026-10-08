@@ -280,7 +280,8 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   background: rgba(20,18,15,.35); }
 .modal.active { display: flex; }
 .modal-box { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--line);
-  border-radius: 14px; padding: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+  border-radius: 14px; padding: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.3);
+  max-height: calc(100vh - 32px); overflow-y: auto; }   /* zu hoch? -> innen scrollen */
 .modal-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
 .modal-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
 .modal-box textarea { width: 100%; height: 260px; resize: vertical; padding: 10px 12px;

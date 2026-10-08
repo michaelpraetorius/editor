@@ -76,7 +76,7 @@ async function loadInitialDeck(store) {
 }
 
 // Build-Kennung. MUSS bei jedem Deploy gemeinsam mit version.txt erhöht werden.
-const BUILD = '2026-10-08-1';
+const BUILD = '2026-10-08-2';
 
 // Selbstheilung gegen gemischten Browser-/Pages-Cache: liegt eine neuere Version
 // vor (version.txt, no-store), lädt die Seite genau einmal frisch neu.
