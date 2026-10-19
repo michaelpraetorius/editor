@@ -458,7 +458,7 @@ export class UI {
     const keyKey = () => 'cpe.aiKey.' + curProvider();       // Key pro Anbieter gemerkt
     const modelKey = () => 'cpe.aiModel.' + curProvider();
 
-    const syncHelp = () => { helpBox.hidden = keyEl.value.trim().length > 0; };
+    // Hilfe steckt hinter dem „?" und ist standardmäßig eingeklappt (spart Platz).
     const renderHelp = () => {
       const ui = PROVIDER_UI[curProvider()] || PROVIDER_UI.anthropic;
       helpBox.innerHTML = '<ol>' + ui.steps.map((s) => `<li>${s}</li>`).join('') + '</ol>'
@@ -466,6 +466,8 @@ export class UI {
         + '<p class="gen-help-note">Der Key bleibt in deinem Browser (nur diese Sitzung) und geht an niemanden außer dem Anbieter.</p>';
       keyEl.placeholder = ui.placeholder;
     };
+    const helpBtn = $('genKeyHelpBtn');
+    if (helpBtn) helpBtn.onclick = () => { helpBox.hidden = !helpBox.hidden; helpBtn.classList.toggle('on', !helpBox.hidden); };
     const fillModels = () => {
       const p = PROVIDERS[curProvider()];
       sel.innerHTML = p.models.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
@@ -476,12 +478,12 @@ export class UI {
     const applyProvider = () => {
       renderHelp(); fillModels();
       keyEl.value = sessionStorage.getItem(keyKey()) || '';
-      syncHelp();
+      helpBox.hidden = true;                              // eingeklappt lassen
+      if (helpBtn) helpBtn.classList.remove('on');
       sessionStorage.setItem('cpe.aiProvider', curProvider());
     };
     provSel.onchange = applyProvider;
 
-    keyEl.addEventListener('input', syncHelp);
     keyEl.addEventListener('change', () => { const v = keyEl.value.trim(); if (v) sessionStorage.setItem(keyKey(), v); });
 
     // Eingaben, die für „neu generieren" in der Sitzung gemerkt werden.
