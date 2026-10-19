@@ -358,7 +358,8 @@ export class UI {
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('[data-deck]'); if (!b) return;
       menu.classList.remove('open');
-      if (b.dataset.deck === 'import') this._pickDeckFile();
+      if (b.dataset.deck === 'save') this._exportDeckFile();
+      else if (b.dataset.deck === 'import') this._pickDeckFile();
       else if (b.dataset.deck === 'paste') this._openDeckModal();
     });
 
@@ -557,6 +558,51 @@ export class UI {
     document.getElementById('deckPaste').value = '';
     m.classList.add('active');
     setTimeout(() => document.getElementById('deckPaste').focus(), 0);
+  }
+  // Deck als eigenständige Datei speichern: deck.json (Layout) + verwendete Assets
+  // als Data-URL eingebettet. Portabel, ohne Asset-Ordner, nichts auf GitHub.
+  async _exportDeckFile() {
+    try {
+      await preloadDeckAssets(this.store.deck);           // alle referenzierten Bilder bereitstellen
+      const deck = JSON.parse(this.store.exportJSON());   // tiefe Kopie
+      const ids = new Set();
+      deck.slides.forEach((s) => {
+        if (s.background?.assetId) ids.add(s.background.assetId);
+        if (s.overlay?.assetId) ids.add(s.overlay.assetId);
+        (s.decor || []).forEach((d) => d.assetId && ids.add(d.assetId));
+      });
+      if (deck.brand?.show && deck.brand?.logoAssetId) ids.add(deck.brand.logoAssetId);
+
+      deck.assets = deck.assets || {};
+      for (const id of ids) {
+        const asset = getAsset(id); if (!asset) continue;
+        const img = getLoadedImage(id) || await loadAssetImage(id); if (!img) continue;
+        const cv = document.createElement('canvas');
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        cv.getContext('2d').drawImage(img, 0, 0);
+        const jpg = asset.type === 'background';            // Hintergrund als JPEG (klein), Rest PNG (Transparenz)
+        deck.assets[id] = {
+          type: asset.type,
+          src: cv.toDataURL(jpg ? 'image/jpeg' : 'image/png', jpg ? 0.9 : undefined),
+          w: img.naturalWidth, h: img.naturalHeight,
+          ...(asset.blend ? { blend: asset.blend } : {}),
+          ...(asset.defaultOpacity != null ? { defaultOpacity: asset.defaultOpacity } : {}),
+          ...(asset.transparent ? { transparent: true } : {}),
+        };
+      }
+
+      const name = (deck.meta?.title || 'deck').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'deck';
+      const blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name + '.deck.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      const kb = Math.round(blob.size / 1024);
+      this._toast(`Deck gespeichert (${kb.toLocaleString('de-DE')} KB, mit Assets)`, 'success');
+    } catch (err) {
+      console.error(err);
+      this._toast('Speichern fehlgeschlagen: ' + (err.message || 'Fehler'), 'error');
+    }
   }
   // Toleriert Code-Fences / Fließtext um das JSON (externe KI-Ausgaben).
   _extractJSON(text) {
