@@ -280,19 +280,19 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   background: rgba(20,18,15,.35); }
 .modal.active { display: flex; }
 .modal-box { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--line);
-  border-radius: 14px; padding: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.3);
+  border-radius: 14px; padding: 14px 16px; box-shadow: 0 24px 70px rgba(0,0,0,.3);
   max-height: calc(100vh - 32px); overflow-y: auto; }   /* zu hoch? -> innen scrollen */
-.modal-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.modal-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
 .modal-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
 .modal-box textarea { width: 100%; height: 260px; resize: vertical; padding: 10px 12px;
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5;
   color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; outline: none; }
 .modal-box textarea:focus { border-color: var(--accent); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
-/* KI-Modal: Formular */
-.gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.gen-field { display: flex; flex-direction: column; gap: 4px; }
+/* KI-Modal: Formular (kompakt) */
+.gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.gen-field { display: flex; flex-direction: column; gap: 2px; }
 .gen-field.gen-wide { grid-column: 1 / -1; }
 .gen-field > span { font-size: 12px; font-weight: 600; color: #111318; }   /* Beschriftung dunkel */
 .gen-field .gen-opt { font-weight: 400; color: var(--muted); }
@@ -301,13 +301,13 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   color: #111318; background: #fff; border: 1px solid #d4d4d8;
   border-radius: 8px; outline: none;
 }
-.gen-field input, .gen-field select { height: 40px; padding: 0 12px; }   /* Felder + Dropdowns gleiche Höhe */
+.gen-field input, .gen-field select { height: 34px; padding: 0 11px; }   /* Felder + Dropdowns gleiche Höhe */
 .gen-field select {
   -webkit-appearance: none; appearance: none; padding-right: 32px; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23111318' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center;
 }
-.gen-field textarea { padding: 10px 12px; resize: vertical; line-height: 1.45; }
+.gen-field textarea { height: auto; padding: 8px 11px; resize: vertical; line-height: 1.4; }
 .gen-field input::placeholder, .gen-field textarea::placeholder { color: #9aa0a6; }   /* neutrales Grau */
 .gen-field input:focus, .gen-field select:focus, .gen-field textarea:focus { border-color: var(--accent); }
 @media (max-width: 560px) { .gen-grid { grid-template-columns: 1fr; } }
@@ -328,7 +328,7 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: middle; }
 .gen-help-q:hover, .gen-help-q.on { border-color: var(--accent); color: var(--accent); }
 .gen-reset { margin-right: auto; }   /* „Felder leeren" links, Abbrechen/Generieren rechts */
-.gen-count { margin-top: 4px; font-size: 11px; color: var(--muted); text-align: right; }
+.gen-count { margin-top: 2px; font-size: 11px; color: var(--muted); text-align: right; }
 .gen-count.over { color: var(--danger); font-weight: 700; }
 .gen-error { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.45;
   color: var(--danger); background: #fbecee; border: 1px solid #f0d3d7; }

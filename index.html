@@ -162,13 +162,9 @@
           <input id="genKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" />
           <div class="gen-help" id="genKeyHelpBox" hidden></div>
         </div>
-        <label class="gen-field">
-          <span>Anzahl Folien</span>
-          <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
-        </label>
         <label class="gen-field gen-wide">
           <span>Thema / Quelltext</span>
-          <textarea id="genThema" rows="3" spellcheck="false" placeholder="Thema in einem Satz …"></textarea>
+          <textarea id="genThema" rows="2" spellcheck="false" placeholder="Thema in einem Satz …"></textarea>
           <div class="gen-count" id="themaCount"></div>
         </label>
         <label class="gen-field">
@@ -179,9 +175,13 @@
           <span>Tonalität</span>
           <input id="genTon" type="text" placeholder="z. B. warm, ermutigend" />
         </label>
-        <label class="gen-field gen-wide">
-          <span>Struktur / Aufbau <span class="gen-opt">(optional)</span></span>
-          <textarea id="genStruktur" rows="2" spellcheck="false" placeholder="z. B. Einstieg, 3 Tipps, Abschluss mit Call-to-Action"></textarea>
+        <label class="gen-field">
+          <span>Anzahl Folien</span>
+          <input id="genCount" type="number" min="1" max="12" placeholder="automatisch" />
+        </label>
+        <label class="gen-field">
+          <span>Struktur <span class="gen-opt">(optional)</span></span>
+          <input id="genStruktur" type="text" placeholder="z. B. Einstieg, 3 Tipps, CTA" />
         </label>
       </div>
       <div id="genError" class="gen-error" hidden></div>
