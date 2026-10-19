@@ -358,7 +358,7 @@ export class UI {
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('[data-deck]'); if (!b) return;
       menu.classList.remove('open');
-      if (b.dataset.deck === 'save') this._exportDeckFile();
+      if (b.dataset.deck === 'save') this._exportDeckZip();
       else if (b.dataset.deck === 'import') this._pickDeckFile();
       else if (b.dataset.deck === 'paste') this._openDeckModal();
     });
@@ -561,9 +561,10 @@ export class UI {
     m.classList.add('active');
     setTimeout(() => document.getElementById('deckPaste').focus(), 0);
   }
-  // Deck als eigenständige Datei speichern: deck.json (Layout) + verwendete Assets
-  // als Data-URL eingebettet. Portabel, ohne Asset-Ordner, nichts auf GitHub.
-  async _exportDeckFile() {
+  // Deck als ZIP speichern: deck.json (Layout) + die verwendeten Bilder als echte
+  // Dateien (assets/…). Portabel, ohne Asset-Ordner, nichts auf GitHub. Alles im Browser.
+  async _exportDeckZip() {
+    if (typeof JSZip === 'undefined') { this._toast('ZIP-Bibliothek nicht geladen', 'error'); return; }
     try {
       await preloadDeckAssets(this.store.deck);           // alle referenzierten Bilder bereitstellen
       const deck = JSON.parse(this.store.exportJSON());   // tiefe Kopie
@@ -575,6 +576,8 @@ export class UI {
       });
       if (deck.brand?.show && deck.brand?.logoAssetId) ids.add(deck.brand.logoAssetId);
 
+      const zip = new JSZip();
+      const assetsDir = zip.folder('assets');
       deck.assets = deck.assets || {};
       for (const id of ids) {
         const asset = getAsset(id); if (!asset) continue;
@@ -583,28 +586,53 @@ export class UI {
         cv.width = img.naturalWidth; cv.height = img.naturalHeight;
         cv.getContext('2d').drawImage(img, 0, 0);
         const jpg = asset.type === 'background';            // Hintergrund als JPEG (klein), Rest PNG (Transparenz)
+        const blob = await new Promise((res) => cv.toBlob(res, jpg ? 'image/jpeg' : 'image/png', jpg ? 0.9 : undefined));
+        const fileName = id.replace(/[^a-z0-9._-]+/gi, '-') + (jpg ? '.jpg' : '.png');
+        assetsDir.file(fileName, blob);                     // echte Bilddatei im ZIP
         deck.assets[id] = {
           type: asset.type,
-          src: cv.toDataURL(jpg ? 'image/jpeg' : 'image/png', jpg ? 0.9 : undefined),
+          file: 'assets/' + fileName,                       // Verweis auf die Datei (keine Data-URL)
           w: img.naturalWidth, h: img.naturalHeight,
           ...(asset.blend ? { blend: asset.blend } : {}),
           ...(asset.defaultOpacity != null ? { defaultOpacity: asset.defaultOpacity } : {}),
           ...(asset.transparent ? { transparent: true } : {}),
         };
       }
+      zip.file('deck.json', JSON.stringify(deck, null, 2));
 
       const name = (deck.meta?.title || 'deck').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'deck';
-      const blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });
+      const out = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = name + '.deck.json';
+      a.href = URL.createObjectURL(out); a.download = name + '.deck.zip';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      const kb = Math.round(blob.size / 1024);
-      this._toast(`Deck gespeichert (${kb.toLocaleString('de-DE')} KB, mit Assets)`, 'success');
+      this._toast(`Deck gespeichert (${Math.round(out.size / 1024).toLocaleString('de-DE')} KB, ZIP mit Bildern)`, 'success');
     } catch (err) {
       console.error(err);
       this._toast('Speichern fehlgeschlagen: ' + (err.message || 'Fehler'), 'error');
     }
+  }
+  // ZIP-Deck laden: deck.json + Bilddateien aus dem ZIP. Bilder werden in die
+  // Laufzeit übernommen (als Data-URL im Speicher, damit sie auch einen Reload überstehen).
+  async _loadDeckZip(file) {
+    if (typeof JSZip === 'undefined') throw new Error('ZIP-Bibliothek nicht geladen');
+    const zip = await JSZip.loadAsync(file);
+    const entry = zip.file('deck.json');
+    if (!entry) throw new Error('Keine deck.json im ZIP gefunden');
+    const deck = JSON.parse(await entry.async('string'));
+    for (const [, a] of Object.entries(deck.assets || {})) {
+      if (!a.file) continue;
+      const f = zip.file(a.file); if (!f) continue;
+      const b64 = await f.async('base64');
+      const mime = /\.jpe?g$/i.test(a.file) ? 'image/jpeg' : 'image/png';
+      a.src = `data:${mime};base64,${b64}`;               // Bild in die Laufzeit übernehmen
+      delete a.file;
+    }
+    this.store.loadDeck(deck);                             // registerDeckAssets registriert die Bilder
+    this._assignFolderBackgrounds();
+    await preloadDeckAssets(this.store.deck);
+    this.renderer.fit();
+    this.renderThumbs();
   }
   // Toleriert Code-Fences / Fließtext um das JSON (externe KI-Ausgaben).
   _extractJSON(text) {
@@ -625,10 +653,11 @@ export class UI {
   _pickDeckFile() { document.getElementById('deckFile')?.click(); }
   async _loadDeckFile(file) {
     try {
-      const text = await file.text();
-      await this._loadDeckJSON(text);
+      const isZip = /\.zip$/i.test(file.name) || /zip/.test(file.type || '');
+      if (isZip) await this._loadDeckZip(file);
+      else await this._loadDeckJSON(await file.text());
       this._toast(`„${file.name}" geladen`, 'success');
-    } catch (err) { console.error(err); this._toast('Ungültiges deck.json', 'error'); }
+    } catch (err) { console.error(err); this._toast('Konnte Datei nicht laden: ' + (err.message || ''), 'error'); }
   }
   // Sieht ein Text nach einem Deck aus? (grobe Prüfung vor dem Laden)
   _looksLikeDeck(text) {
@@ -638,15 +667,15 @@ export class UI {
   }
   _bindDeckDrop() {
     const app = document.querySelector('.app') || document.body;
-    const isJsonDrag = (e) => [...(e.dataTransfer?.items || [])]
-      .some((it) => it.kind === 'file' && (it.type === 'application/json' || it.type === ''));
+    const isDeckDrag = (e) => [...(e.dataTransfer?.items || [])]
+      .some((it) => it.kind === 'file' && (it.type === 'application/json' || /zip/.test(it.type) || it.type === ''));
     app.addEventListener('dragover', (e) => {
-      if (!isJsonDrag(e)) return;            // Asset-Drops auf die Bühne nicht stören
+      if (!isDeckDrag(e)) return;            // Asset-Drops auf die Bühne nicht stören
       e.preventDefault(); app.classList.add('deck-drop');
     });
     app.addEventListener('dragleave', (e) => { if (e.target === app) app.classList.remove('deck-drop'); });
     app.addEventListener('drop', async (e) => {
-      const f = [...(e.dataTransfer?.files || [])].find((x) => /\.json$/i.test(x.name) || x.type === 'application/json');
+      const f = [...(e.dataTransfer?.files || [])].find((x) => /\.(json|zip)$/i.test(x.name) || x.type === 'application/json' || /zip/.test(x.type || ''));
       if (!f) return;
       e.preventDefault(); app.classList.remove('deck-drop');
       await this._loadDeckFile(f);

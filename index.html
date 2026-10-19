@@ -11,6 +11,7 @@
   <!-- Libs als UMD-Globals (window.Konva / window.jspdf), lokal vendored, vor den Modulen -->
   <script src="./vendor/konva.min.js"></script>
   <script src="./vendor/jspdf.umd.min.js"></script>
+  <script src="./vendor/jszip.min.js"></script>
 </head>
 <body>
   <!-- erzwingt Font-Download vor Canvas-Textsatz -->
@@ -61,11 +62,11 @@
         <div class="menu-wrap">
           <button id="deckBtn">Deck ▾</button>
           <div class="menu" id="deckMenu">
-            <button data-deck="save">Deck speichern (Datei, mit Assets) …</button>
-            <button data-deck="import">Deck importieren …</button>
+            <button data-deck="save">Deck speichern (ZIP, mit Bildern) …</button>
+            <button data-deck="import">Deck importieren (ZIP oder JSON) …</button>
             <button data-deck="paste">Deck einfügen (Text) …</button>
           </div>
-          <input type="file" id="deckFile" accept=".json,application/json" hidden />
+          <input type="file" id="deckFile" accept=".zip,.json,application/zip,application/json" hidden />
         </div>
         <div class="menu-wrap">
           <button id="resetBtn">Zurücksetzen ▾</button>
@@ -167,7 +168,7 @@
         </label>
         <label class="gen-field gen-wide">
           <span>Thema / Quelltext</span>
-          <textarea id="genThema" rows="6" spellcheck="false" placeholder="Thema in einem Satz …"></textarea>
+          <textarea id="genThema" rows="3" spellcheck="false" placeholder="Thema in einem Satz …"></textarea>
           <div class="gen-count" id="themaCount"></div>
         </label>
         <label class="gen-field">
