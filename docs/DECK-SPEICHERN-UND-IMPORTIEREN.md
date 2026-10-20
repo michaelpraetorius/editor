@@ -8,7 +8,7 @@ Editor: **https://michaelpraetorius.github.io/editor/**
 
 ## Deck speichern (Download)
 
-**Deck ▾ → „Deck speichern (ZIP, mit Bildern) …"**
+**Export ▾ → „Deck-Datei (ZIP, mit Bildern) …"**
 
 Es wird eine Datei heruntergeladen: **`<titel>.deck.zip`**. Darin steckt **alles**:
 - `deck.json` – das Layout (Format, pro Folie Hintergrund/Overlay/Artwork, Textfarben, Positionen)
@@ -46,7 +46,7 @@ gespeicherten Bilder mit.
 ## Typischer Ablauf zum Weitergeben
 
 1. Deck fertig gestalten.
-2. **„Deck speichern (ZIP, mit Bildern)"** → `.deck.zip` herunterladen.
+2. **Export ▾ → „Deck-Datei (ZIP, mit Bildern)"** → `.deck.zip` herunterladen.
 3. Datei weitergeben (z. B. per Mail oder geteiltem Ordner).
 4. Empfänger: Editor öffnen → **„Deck importieren"** → die `.deck.zip` wählen. Fertig – alles da,
    **kein KI-Key und kein Asset-Ordner nötig.**

@@ -84,6 +84,7 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   padding: 9px 10px; font-weight: 500; }
 .menu button:hover { background: var(--hover); }
 .menu button:disabled { opacity: .4; }
+.menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 .help-menu { min-width: 264px; padding: 12px; }
 .help-line { font-size: 12px; line-height: 1.5; color: var(--ink); padding: 3px 0; }
 .help-line + .help-line { border-top: 1px solid var(--line); }

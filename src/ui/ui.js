@@ -102,6 +102,7 @@ export class UI {
       else if (k === 'png-all') this._run('PNG-Set', (p) => exportAllPNG(this.store, p));
       else if (k === 'pdf') this._run('PDF', (p) => exportPDF(this.store, p));
       else if (k === 'mp4') this._run('Video', (p) => exportMP4(this.store, { onProgress: p }));
+      else if (k === 'deck-zip') this._exportDeckZip();
     });
   }
   _syncToolbar() {
@@ -358,8 +359,7 @@ export class UI {
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('[data-deck]'); if (!b) return;
       menu.classList.remove('open');
-      if (b.dataset.deck === 'save') this._exportDeckZip();
-      else if (b.dataset.deck === 'import') this._pickDeckFile();
+      if (b.dataset.deck === 'import') this._pickDeckFile();
       else if (b.dataset.deck === 'paste') this._openDeckModal();
     });
 
