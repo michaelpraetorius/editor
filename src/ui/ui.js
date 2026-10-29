@@ -7,6 +7,7 @@ import { assetsByType, loadAssetImage, getAsset, getLoadedImage, preloadDeckAsse
 import { generateDeck, PROVIDERS, DEFAULT_PROVIDER } from '../ai/generate.js';
 import { TEXT_COLORS, DEFAULT_TEXT_COLOR } from '../model/brand.js';
 import { EXAMPLE_DECK } from '../model/example-deck.js';
+import { listProjects, getProject, saveProject, deleteProject, newId, setActiveId, getActiveId } from '../core/projects.js';
 import { removeBackground } from '../render/bg-remove.js';
 import { OffscreenRenderer } from '../export/offscreen.js';
 import { exportCurrentPNG, exportAllPNG } from '../export/png.js';
@@ -429,6 +430,115 @@ export class UI {
     if (!confirm('Wirklich ALLES zurücksetzen? Inhalte, Grafiken, hochgeladene Bilder und der API-Key gehen verloren.')) return;
     try { localStorage.clear(); sessionStorage.clear(); } catch {}
     location.reload();
+  }
+
+  // ---- Projekte (lokal, IndexedDB) ------------------------------------
+  initProjects(proj) {
+    this._activeId = proj?.activeId || getActiveId();
+    this._activeName = proj?.name || 'Projekt';
+    this._updateProjBtn();
+    this._bindProjectsMenu();
+    // Auto-Speichern bei jeder Deck-/Format-Änderung (gebündelt).
+    let t;
+    const schedule = () => { clearTimeout(t); t = setTimeout(() => this._saveActiveProject(), 700); };
+    this.store.on('deck', schedule);
+    this.store.on('format', schedule);
+  }
+  _updateProjBtn() {
+    const btn = document.getElementById('projBtn');
+    if (btn) { btn.textContent = (this._activeName || 'Projekte') + ' ▾'; btn.title = `Projekt: ${this._activeName || '–'} (lokal gespeichert)`; }
+  }
+  _bindProjectsMenu() {
+    const btn = document.getElementById('projBtn'), menu = document.getElementById('projMenu');
+    if (!btn || !menu) return;
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const open = menu.classList.contains('open');
+      if (open) { menu.classList.remove('open'); return; }
+      await this._renderProjMenu(); menu.classList.add('open');
+    };
+    document.addEventListener('click', () => menu.classList.remove('open'));
+    menu.addEventListener('click', async (e) => {
+      const el = e.target.closest('[data-proj-new],[data-proj-open],[data-proj-rename],[data-proj-del]');
+      if (!el) return;
+      e.stopPropagation();
+      if (el.hasAttribute('data-proj-new')) { menu.classList.remove('open'); await this._newProject(); }
+      else if (el.dataset.projOpen) { menu.classList.remove('open'); await this._openProject(el.dataset.projOpen); }
+      else if (el.dataset.projRename) { await this._renameProject(el.dataset.projRename); await this._renderProjMenu(); }
+      else if (el.dataset.projDel) { await this._deleteProject(el.dataset.projDel); await this._renderProjMenu(); }
+    });
+  }
+  async _renderProjMenu() {
+    const menu = document.getElementById('projMenu');
+    const all = await listProjects();
+    const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let html = '<button class="proj-new" data-proj-new>＋ Neues Projekt</button><div class="menu-sep"></div>';
+    html += all.length
+      ? all.map((p) => `<div class="proj-row ${p.id === this._activeId ? 'active' : ''}">`
+          + `<button class="proj-open" data-proj-open="${p.id}" title="${esc(p.name)}">${esc(p.name)}</button>`
+          + `<button class="proj-rename" data-proj-rename="${p.id}" title="Umbenennen">✎</button>`
+          + `<button class="proj-del" data-proj-del="${p.id}" title="Löschen">×</button></div>`).join('')
+      : '<div class="proj-empty">Noch keine Projekte.</div>';
+    menu.innerHTML = html;
+  }
+  async _applyDeckObject(deck) {
+    this.store.loadDeck(deck);
+    await preloadDeckAssets(this.store.deck);
+    this.renderer.fit();
+    this.renderThumbs();
+  }
+  async _saveActiveProject() {
+    if (!this._activeId) return;
+    try { await saveProject({ id: this._activeId, name: this._activeName || 'Projekt', deck: JSON.parse(this.store.exportJSON()) }); }
+    catch (e) { console.warn('[Projekt] Speichern fehlgeschlagen:', e); }
+  }
+  async _newProject() {
+    await this._saveActiveProject();                       // aktuelles sichern
+    const def = 'Posting ' + new Date().toLocaleDateString('de-DE');
+    const name = (prompt('Name des neuen Projekts:', def) || '').trim();
+    if (!name) return;
+    this._activeId = newId(); this._activeName = name; setActiveId(this._activeId);
+    this.store.loadDeck(JSON.parse(JSON.stringify(EXAMPLE_DECK)));   // frisches Start-Deck (Blindtext)
+    this._assignFolderBackgrounds();
+    await preloadDeckAssets(this.store.deck);
+    this.renderer.fit(); this.renderThumbs();
+    await this._saveActiveProject();
+    this._updateProjBtn();
+    this._toast(`Projekt „${name}" angelegt`, 'success');
+  }
+  async _openProject(id) {
+    if (id === this._activeId) return;
+    await this._saveActiveProject();                       // aktuelles sichern
+    const p = await getProject(id);
+    if (!p) { this._toast('Projekt nicht gefunden', 'error'); return; }
+    this._activeId = id; this._activeName = p.name; setActiveId(id);
+    await this._applyDeckObject(p.deck);
+    this._updateProjBtn();
+    this._toast(`„${p.name}" geöffnet`, 'success');
+  }
+  async _renameProject(id) {
+    const p = await getProject(id); if (!p) return;
+    const name = (prompt('Projekt umbenennen:', p.name) || '').trim();
+    if (!name || name === p.name) return;
+    p.name = name; await saveProject(p);
+    if (id === this._activeId) { this._activeName = name; this._updateProjBtn(); }
+  }
+  async _deleteProject(id) {
+    const p = await getProject(id); if (!p) return;
+    if (!confirm(`Projekt „${p.name}" wirklich löschen?`)) return;
+    await deleteProject(id);
+    if (id === this._activeId) {
+      this._activeId = null;                               // nicht mehr aktiv -> kein Re-Save
+      const rest = await listProjects();
+      if (rest.length) { await this._openProject(rest[0].id); }
+      else {
+        this._activeId = newId(); this._activeName = 'Projekt 1'; setActiveId(this._activeId);
+        this.store.loadDeck(JSON.parse(JSON.stringify(EXAMPLE_DECK))); this._assignFolderBackgrounds();
+        await preloadDeckAssets(this.store.deck); this.renderer.fit(); this.renderThumbs();
+        await this._saveActiveProject(); this._updateProjBtn();
+      }
+    }
+    this._toast('Projekt gelöscht', 'success');
   }
 
   // ---- KI: Folien mit Claude erzeugen (eigener Key, direkt im Browser) --

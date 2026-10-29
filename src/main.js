@@ -6,6 +6,7 @@ import { UI } from './ui/ui.js';
 import { preloadAll, preloadDeckAssets, getAsset } from './model/assets.js';
 import { loadExternalAssets } from './model/external-assets.js';
 import { BRAND_DISPLAY } from './model/brand.js';
+import { bootProjects } from './core/projects.js';
 
 // Belegt jede Slide mit einem Gradient (z0) + einer DNA (z10) aus dem Ordner,
 // sofern noch nicht (gültig) gesetzt. Rundlauf über die vorhandenen Dateien.
@@ -65,18 +66,19 @@ async function getDeckSource() {
 // Generierung (geänderte deck.json / neuer Link) wird frisch übernommen.
 async function loadInitialDeck(store) {
   const src = await getDeckSource();
-  if (!src) return;
+  if (!src) return false;
   const sig = 'deck:' + simpleHash(src.text);
-  if (localStorage.getItem('cpe.deckSig') === sig) return;   // schon geladen -> Edits behalten
+  if (localStorage.getItem('cpe.deckSig') === sig) return false;   // schon geladen -> Edits behalten
   try {
     store.loadDeck(JSON.parse(src.text));
     localStorage.setItem('cpe.deckSig', sig);
     console.info(`[Deck] geladen aus ${src.kind}`);
-  } catch (e) { console.warn('[Deck] konnte nicht geladen werden:', e); }
+    return true;
+  } catch (e) { console.warn('[Deck] konnte nicht geladen werden:', e); return false; }
 }
 
 // Build-Kennung. MUSS bei jedem Deploy gemeinsam mit version.txt erhöht werden.
-const BUILD = '2026-10-19-6';
+const BUILD = '2026-10-20-1';
 
 // Selbstheilung gegen gemischten Browser-/Pages-Cache: liegt eine neuere Version
 // vor (version.txt, no-store), lädt die Seite genau einmal frisch neu.
@@ -105,14 +107,16 @@ async function boot() {
   console.info(`[Schrift] Marken-Display-Schrift ${brandFont ? 'verfügbar ✔ (wird verwendet)' : 'nicht gefunden → Fallback Inter. Name in src/model/brand.js (BRAND_DISPLAY) setzen.'}`);
 
   const store = new Store();
-  await loadInitialDeck(store);                // ggf. Deck aus Link / URL / deck.json laden
+  const externalDeckLoaded = await loadInitialDeck(store);   // ggf. Deck aus Link / URL / deck.json
+  const proj = await bootProjects(store, { externalDeckLoaded });   // aktives Projekt laden/anlegen
   const folder = await loadExternalAssets();   // Gradienten + DNA aus /assets registrieren
-  applyFolderBackgrounds(store, folder);       // Slides automatisch damit belegen
+  if (!proj.hadProjectDeck) applyFolderBackgrounds(store, folder);  // nur bei frischem Deck belegen
   await preloadDeckAssets(store.deck);
   const stageEl = document.getElementById('stage');
   const renderer = new Renderer(stageEl, store);
   const inlineEditor = new InlineEditor(store, renderer);
   const ui = new UI(store, renderer, inlineEditor, folder);
+  ui.initProjects(proj);                       // Projekt-Menü + Auto-Speichern starten
 
   // Rebuild bei Deck-Änderung, Selektions-Highlight bei Auswahländerung
   store.on('deck', () => renderer.rebuild());
